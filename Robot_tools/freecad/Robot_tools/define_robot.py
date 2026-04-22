@@ -8,8 +8,8 @@ Author: Carlo Dormeletti
 Copyright: 2026
 Licence: All right reserved
 """
-__version__ = "0.06"
-__build__ = "20260421_1903"
+__version__ = "0.07"
+__build__ = "20260422_1307"
 
 
 import sys
@@ -57,6 +57,7 @@ v0.05 - Added actions needed when loading an asm doc:
            and Robot_Assembly object.
          - check for empty joints and signal it with a messagebox.
 v0.06 - added code to add joints (grounded).
+v0.07 - improved check_asm
 """
 
 fcl_err = App.Console.PrintError
@@ -615,7 +616,7 @@ class O2PDialog(QDialog):
     ui_title = "Define Robot"
     IsInit = False  # flag to avoid unwanted action execution during init.
     # Flags dictionary, place here sane defaults
-    flags = {"chb_cpa": False, }
+    flags = {"chb_cpa": False, "chb_gdj": True}
     #
     tab_data = {
         "ma": {"nm": "Main", "cn": 0}, "lg": {"nm": "Log", "cn": 0}}
@@ -838,14 +839,15 @@ class O2PDialog(QDialog):
 
         btn_load_step.clicked.connect(self.act_load_step)
 
-        brow += 1
-        btn_add_jnt = cm_btn(self, "btn_add_jnt", "Add Joints", self.fnt, 0)
-        btn_add_jnt.setEnabled(False)
-        gb_btl.addWidget(btn_add_jnt, brow, 0, 1, 2)
+        # brow += 1
+        # btn_add_jnt = cm_btn(self, "btn_add_jnt", "Add Joints", self.fnt, 0)
+        # btn_add_jnt.setEnabled(False)
+        # gb_btl.addWidget(btn_add_jnt, brow, 0, 1, 2)
 
-        btn_add_jnt.clicked.connect(self.act_add_joint)
+        # btn_add_jnt.clicked.connect(self.act_add_joint)
 
-        ma_lay.addWidget(gb_bt, row, 0, 1, 4)
+        # ma_lay.addWidget(gb_bt, row, 0, 1, 4)
+
         row += 1
 
         tp_gb0, tp_gb0l = cm_gbx(self, "tp_gb0", "")
@@ -901,9 +903,14 @@ class O2PDialog(QDialog):
         btn_jnt_s2.clicked.connect(self.select_face)
 
         brow += 1
-        chb_sgj = cm_chb(self, "chb_sgj", "Grounded Joint", self.fnt, True)
-        js_gb0l.addWidget(chb_sgj, brow, 0, 1, 2)
-        chb_sgj.setChecked(True)
+        chb_gdj = cm_chb(self, "chb_gdj", "Grounded Joint", self.fnt, True)
+        js_gb0l.addWidget(chb_gdj, brow, 0, 1, 2)
+        # Check the flag to determine the state
+        if self.flags['chb_gdj'] is True:
+            chb_gdj.setChecked(True)
+        else:
+            chb_gdj.setChecked(False)
+            chb_gdj.setEnabled(False)
 
         brow += 1
         btn_jnt_add = cm_btn(self, "btn_jnt_add", "Add Joint", self.fnt, 0)
@@ -1023,6 +1030,7 @@ class O2PDialog(QDialog):
             #
             self.check_asm()
             setview(o_doc.Name)
+            self.jnt_setui()
 
     # --------------------------------------------
     #                Assembly functions
@@ -1071,14 +1079,13 @@ class O2PDialog(QDialog):
         asm_doc.recompute()
         # Disable "Create ASM" button
         set_wid_en(self, ("btn_cre_asm",), False)
-        # Enable "Add joint" button
-        set_wid_en(self, ("btn_add_jnt",), True)
-
-    def act_add_joint(self):
-        """Add Joint panel assembly."""
+        # Create the "Add joint" groupbox
         self.jnt_setui()
-        self.jnt_ec = 0
-        return
+
+    # def act_add_joint(self):
+    #     """Add Joint panel assembly."""
+    #     self.jnt_setui()
+    #     return
 
     def act_load_step(self):
         """Load Step file."""
@@ -1086,8 +1093,9 @@ class O2PDialog(QDialog):
         # fcl_msg(f"STEPFile: {sf}\n")
         App.openDocument(sf)
 
-    def check_asm(self):
+    def check_asm(self, dbg_s=False):
         """Check the correctness of the asm file."""
+        dbg_s = True  # DBG
         asm_objs = self.wk_asm_d.getObjectsByLabel("Robot_Assembly")
         ran = len(asm_objs)
         if ran > 0:
@@ -1131,7 +1139,25 @@ class O2PDialog(QDialog):
                  "You must select a valid Assembly Robot document"))
             return
         #
+        # NOTE: check for an existing object name "GroundedJoint",
+        #       it seems the only way to determine if a grounded joint exist.
+        grd_objf = False
+        grd_obj = self.wk_asm.getObject("GroundedJoint")
+
+        if grd_obj is not None:
+            if dbg_s:
+                fcl_msg("Grounded joint present\n")  # DBG
+            grd_objf = True
+        else:
+            if dbg_s:
+                fcl_msg("No grounded joint!\n")  # DBG
+            pass
+        #
         ojl = len(self.wk_asm.Joints)
+
+        if dbg_s:
+            fcl_msg(f">> ojl: {ojl}\n")
+
         if ojl == 0:
             msg_box(
                 self, "Robot_tools", self.fnt,
@@ -1142,16 +1168,23 @@ class O2PDialog(QDialog):
         # TODO: we could deactivate also the "Select Asembly File" button too?
         set_wid_en(self, ("btn_cre_asm", "btn_selrbf"), False)
 
+        if grd_objf is True:
+            self.jnt_ec = 1
+            # NOTE: use of the flag as at this point the ui is not yet created.
+            self.flags["chb_gdj"] = False
+            self.add_joint2ui(self.jnt_ec + 1, [0, "grounded", "--", "--"])
+ 
         # Check if assembly object has only a Joint group on it
         # checking Group property length > 1 will tell if there are other
         # objects
         # FIXME: it is rough guess see if there are alternatives.
         if len(self.wk_asm.Group) > 1:
-            set_wid_en(self, ("btn_add_jnt",), True)
+            pass
+            # set_wid_en(self, ("btn_add_jnt",), True)  # 
             # NOTE: no need to activate the "Load STEP" button as the Document
             # with robot components will be opened by FreeCAD for us.
         else:
-            set_wid_en(self, ("btn_add_jnt", "btn_load_step"), True)
+            set_wid_en(self, ("btn_load_step",), True)
 
         if ojl > 0:
             print(f"obj: {ojl}")
@@ -1167,9 +1200,12 @@ class O2PDialog(QDialog):
     #                   Add joint
     # --------------------------------------------
 
-    def add_jnt2asm(self):
+    def add_jnt2asm(self, dbg_s=False):
         """Add a joint to the assembly and the FPO."""
-        fcl_msg(f"Joint meta: {self.jnt_meta}\n")
+        dbg_s = True  # BDG
+        if dbg_s:
+            fcl_msg(f"Joint meta: {self.jnt_meta}\n")
+
         # NOTE: correct sequence:
         # 1) validate the sequence
         # 2) reset the face counter to 1
@@ -1178,31 +1214,58 @@ class O2PDialog(QDialog):
         # 5) set buttons Select Face1 and Select Face2 state
         dks = list(self.jnt_meta)
         jn = int(dks[0][5:7])
-        jf = int(dks[0][7:9])
-        jid0 = self.jnt_meta[dks[0]]
+        jf1 = int(dks[0][7:9])
+        jmo0 = self.jnt_meta[dks[0]]
+        jnt_fc1_onm = jmo0['ob_nm']
+        jnt_fc1_obj = self.wk_asm.getObject(jnt_fc1_onm)
+
+        if dbg_s:
+            fcl_msg(f"Joint number {jn} Face {jf1} jid: {jmo0}\n")
+            fcl_msg(f"-- f1 obj name: {jnt_fc1_onm}\n")
+            fcl_msg(f"-- f1 obj Label: {jnt_fc1_obj.Label}\n")
+            fcl_msg(f"-- f1 obj Label2: {jnt_fc1_obj.Label2}\n")
+
         if len(dks) == 1:
-            fcl_msg(f"Joint number {jn} Face {jf} jid: {jid0}\n")
             # one face selected, so the joint is probably the grounded one.
             if jn == 0:
                 # This is probably a grounded joint as it is logically the first
                 # to be set.
-                jnt_fc1_onm = jid0['ob_nm']
-                jnt_fc1_se = jid0['sub_el'][0]
-                jnt_obj = self.wk_asm.getObject(jnt_fc1_onm)
-                add_grounded(self.wk_asm, jnt_obj)
+                add_grounded(self.wk_asm, jnt_fc1_obj)
                 self.wk_asm.recompute()
                 # Reset the interface
                 set_wid_en(self, ("btn_jnt_s1",), True)
-                set_wid_en(self, ("chb_sgj",), False)
+                set_wid_en(self, ("chb_gdj",), False)
                 # TODO: populate the joint frame with a joint type.
-                self.add_joint2ui(jn + 2, [0, "grounded", jnt_fc1_se, "--"])
+                self.add_joint2ui(jn + 2, [0, "grounded", "--", "--"])
                 # advance joint counter and reset face counter and data dict
                 self.jnt_ec += 1
                 self.jnt_fc = 1
                 self.jnt_meta = {}
+                return
             else:
                 # Emit an error as two faces are needed
                 return
+
+        # At this point we could be sure that there are two objects in the list
+        jf2 = int(dks[1][7:9])
+        jmo1 = self.jnt_meta[dks[1]]
+        jnt_fc2_onm = jmo1['ob_nm']
+        jnt_fc2_obj = self.wk_asm.getObject(jnt_fc2_onm)
+        #
+        if dbg_s:
+            fcl_msg(f"Joint number {jn} Face {jf2} jmo1: {jmo1}\n")
+            fcl_msg(f"-- f1 obj Name: {jnt_fc2_onm}\n")
+        #
+        if jnt_fc2_obj is not None:
+            if dbg_s:
+                fcl_msg(f"-- f2 obj Label: {jnt_fc2_obj.Label}\n")
+                fcl_msg(f"-- f2 obj Label2: {jnt_fc2_obj.Label2}\n")
+
+        else:
+            if dbg_s:
+                fcl_msg(f"-- f2 obj not found: {jnt_fc2_obj}\n")
+            # emit an error?
+            pass
 
         # NOTE: following code is to add the joint to the ASM
         # add_grounded(asm, base_obj)
@@ -1220,12 +1283,21 @@ class O2PDialog(QDialog):
 
         # rev1.recompute()
 
-    def select_face(self):
+    def select_face(self, dbg_s=False):
         """Select Face."""
-        fcl_msg(f"Select Face{self.jnt_fc}\n")
-        raw_sel = Gui.Selection.getSelectionEx()
-        esn = len(raw_sel)
+        dbg_s = True  # DBG
+        if dbg_s:
+            fcl_msg(f"Select Face{self.jnt_fc}\n")
+        # FIXME: getSelectionEx() seems not to work correctly with elements
+        #        contained in "Part container". InList seems to not help here
+        #        we must check the selection to obtain the Part Container Name
 
+        raw_sel = Gui.Selection.getSelectionEx()
+        #
+        if dbg_s:
+            fcl_msg(f"Raw_ sel: {raw_sel}\n")
+
+        esn = len(raw_sel)
         if esn == 0:
             msg_box(
                 self, "Robot_tools", self.fnt,
@@ -1236,10 +1308,13 @@ class O2PDialog(QDialog):
             obj = s0.Object
             sub_ent = s0.SubElementNames
             obj_typ = obj.TypeId
+            # obj_il = obj.InList
             fcl_msg((
+                f"Selection: {s0}\n"
                 f"Obj Name: {obj.Name}\n"
                 f"Obj Label: {obj.Label}\n"
                 f"Obj Type: {obj_typ}\n"
+                # f"Obj InList: {obj_il}\n"
                 f"Obj SubElements: {sub_ent}\n"
             )
             )

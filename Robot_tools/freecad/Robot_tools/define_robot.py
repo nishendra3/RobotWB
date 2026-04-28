@@ -8,8 +8,8 @@ Author: Carlo Dormeletti
 Copyright: 2026
 Licence: All right reserved
 """
-__version__ = "0.12"
-__build__ = "20260428_1225"
+__version__ = "0.13"
+__build__ = "20260428_1254"
 
 
 import sys
@@ -65,6 +65,7 @@ v0.10 - Added code to correctly populate Robot_FPO.
 v0.11 - Some fix in add joints logic.
 v0.12 - Updated to be used also in robot_test.
       - Message boxes fixed to show program name and the context.
+v0.13 - Updated program run detection logic. 
 """
 
 fcl_err = App.Console.PrintError
@@ -74,12 +75,15 @@ fcl_warn = App.Console.PrintWarning
 mdtsp = "%y%m%d_%H%M"
 MODULE_PATH = pathlib.Path(__file__).parent
 
-if str(MODULE_PATH) == "Robot_test":
+if str(MODULE_PATH.stem) == "Robot_test":
     pg_name = "Robot test"
-    fcl_msg("Running on Robot Test")
-else:
+    fcl_msg("Running on Robot Test\n")
+elif str(MODULE_PATH.stem) == "Robot_tools":
     pg_name = "Robot Tools"
-    fcl_msg("Running on Robot Tools")
+    fcl_msg("Running on Robot Tools\n")
+else:
+    pg_name = "Standalone"
+    fcl_msg("Running from command line\n")
 
 V3 = App.Vector
 Rotation = App.Rotation
@@ -795,7 +799,7 @@ class O2PDialog(QDialog):
         ma_lay = self.tabw.findChild(QObject, "l_ma")
         # ma_tab = self.tabw.findChild(QObject, "t_ma")
 
-        fcl_msg(f"isWBcomp {self.isWBcomp}\n ")  # DBG
+        # fcl_msg(f"isWBcomp {self.isWBcomp}\n ")  # DBG
 
         row = 0
 

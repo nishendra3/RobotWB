@@ -9,7 +9,10 @@ Copyright: 2026
 Licence: All right reserved
 """
 __version__ = "0.07"
-__build__ = "20260428_1236"
+__build__ = "20260428_1248"
+
+
+import pathlib
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -44,12 +47,23 @@ v0.09 - Modded to work on robot_test too.
       - Message boxes fixed to show program name and the context.
 """
 
-# pg_name = "Robot test"
-pg_name = "Robot Tools"
-
 fcl_err = App.Console.PrintError
 fcl_msg = App.Console.PrintMessage
 fcl_warn = App.Console.PrintWarning
+
+
+MODULE_PATH = pathlib.Path(__file__).parent
+
+if str(MODULE_PATH.stem) == "Robot_test":
+    pg_name = "Robot test"
+    fcl_msg("Running on Robot Test\n")
+elif str(MODULE_PATH.stem) == "Robot_tools":
+    pg_name = "Robot Tools"
+    fcl_msg("Running on Robot Tools\n")
+else:
+    pg_name = "Standalone"
+    fcl_msg("Running from command line\n")
+
 
 V3 = App.Vector
 Rotation = App.Rotation

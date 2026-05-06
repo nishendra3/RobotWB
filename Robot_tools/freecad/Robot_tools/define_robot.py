@@ -56,8 +56,8 @@ from freecad.Robot_tools.rbt_helpers_doc import (
 )
 
 from freecad.Robot_tools.rbt_helpers_math import roundrot, roundvec
-
 from freecad.Robot_tools.rbt_objects import Robot_obj, ViewProviderRBo
+from freecad.Robot_tools.rbt_fc_observer import RbtObserver
 
 """
 ----------------------------------------
@@ -129,7 +129,7 @@ def add_grounded(asm, obj):
     ground = joint_group.newObject("App::FeaturePython", "GroundedJoint")
     JointObject.GroundedJoint(ground, obj)
     JointObject.ViewProviderGroundedJoint(ground.ViewObject)
-    asm.recompute()
+    asm.Document.recompute()
 
 
 def add_revolute(asm, j_refs, j_lbl, dbg_s=False):
@@ -144,7 +144,7 @@ def add_revolute(asm, j_refs, j_lbl, dbg_s=False):
     revj.Reference2 = j_refs[1]
 
     revj.recompute()
-    asm.recompute()
+    asm.Document.recompute()
     #
     pl1 = a_jnt.findPlacement(revj, revj.Reference1, 0)
     pl2 = a_jnt.findPlacement(revj, revj.Reference2, 0)
@@ -156,7 +156,7 @@ def add_revolute(asm, j_refs, j_lbl, dbg_s=False):
         )
     #
     revj.recompute()
-    asm.recompute()
+    asm.Document.recompute()
 
     return revj
 
@@ -496,9 +496,31 @@ class O2PDialog(QDialog):
 
         self.log_win.show()
 
+    def refresh_joints_panel(self):
+        # 1. delete the widgets
+        lay = self.findChild(QObject, "jn_gb0_l")
+        while lay.count() > 4:
+            item = lay.takeAt(lay.count() - 1)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+        # 2. reset the state vars
+        self.jnt_ec = 0
+        self.jnt_fc = 1
+        self.jnt_meta = {}
+        self.flags["chb_gdj"] = True
+        # 3. rebuild from start
+        self.check_asm()
+
+
     def closeEvent(self, event):
-        """Called on Close event."""
+        """Called on close event."""
         Gui.Selection.removeSelectionGate()
+
+        # clean up the document observer
+        if getattr(self, "doc_observer", None) is not None:
+            self.doc_observer.stop()
+            self.doc_observer = None
 
     def get_chb_content(self, par_nm, obj_nm):
         """Get QCheckBox Widget state."""
@@ -552,6 +574,12 @@ class O2PDialog(QDialog):
             return None
         wid.setText(str(f_name))
         return o_doc
+    
+    def _install_observer(self):
+        """observer to monitor deletion events"""
+        if getattr(self,"doc_observer", None) is not None:
+            return
+        self.doc_observer = RbtObserver(self)
 
     def set_working_model(self):
         """Set robot working model."""
@@ -563,6 +591,7 @@ class O2PDialog(QDialog):
         o_doc = self._open_doc("txt_asnm", "wk_asm_d")
         if o_doc:
             self.check_asm()
+            self._install_observer()
             setview(o_doc.Name)
             self.jnt_setui()
 
@@ -766,13 +795,17 @@ class O2PDialog(QDialog):
         dbg_s = True  # BDG
         if dbg_s:
             fcl_msg(f"Joint meta: {self.jnt_meta}\n")
+        
+        if not self.jnt_meta:
+            msg_box(self, " ", self.fnt, "<b>Add Joint</b><br><br>You must select at least one face first")
+            return
 
         dks = list(self.jnt_meta)
         jn = int(dks[0][5:7])
         jf1 = int(dks[0][7:9])
         jmo0 = self.jnt_meta[dks[0]]
         jnt_fc1_onm = jmo0['ob_nm']
-        jnt_fc1_obj = self.wk_asm.getObject(jnt_fc1_onm)
+        jnt_fc1_obj = jmo0['ob_obj']
         jnt_fc1_oref = jmo0['ob_ref']
 
         if dbg_s:
@@ -809,7 +842,7 @@ class O2PDialog(QDialog):
         jf2 = int(dks[1][7:9])
         jmo1 = self.jnt_meta[dks[1]]
         jnt_fc2_onm = jmo1['ob_nm']
-        jnt_fc2_obj = self.wk_asm.getObject(jnt_fc2_onm)
+        jnt_fc2_obj = jmo1['ob_obj']
         jnt_fc2_oref = jmo1['ob_ref']
         #
         if dbg_s:
@@ -846,7 +879,7 @@ class O2PDialog(QDialog):
             self.add_link2FPO(revj)
             jr1l = f"{jnt_fc1_obj.Name}.{jnt_fc1_oref}"
             jr2l = f"{jnt_fc2_obj.Name}.{jnt_fc2_oref}"
-            self.add_joint2ui(jn + 2, [0, "revolute", jr1l, jr2l])
+            self.add_joint2ui(jn + 2, [self.jnt_ec, "revolute", jr1l, jr2l])
             # advance joint counter and reset face counter and data dict
             self.jnt_ec += 1
             self.jnt_fc = 1
@@ -908,38 +941,22 @@ class O2PDialog(QDialog):
             #       if the object is not existent it is probably in a
             #       "Linked Part container"
             # FIXME: probably an hack!
-            sobj_nm = ""
-            s_obj_ref = ""
-            #
-            sc_obj = self.wk_asm.getObject(obj_nm)
-            if sc_obj is None:
-                obj_plen = len(obj.Parents)
+            # UPDATE: Using get components reference of assembly wb //NISHI
+            link_obj, face_ref = UtilsAssembly.getComponentReference(self.wk_asm, obj, sub_ent[0])
 
-                # double check just in case hack is not correct
-                if obj_plen > 1:
-                    found = False
-                    for c_obj in obj_par:
-                        as_obj = c_obj[0]
-                        as_ref = c_obj[1]
-                        as_refc = as_ref.split('.')
-                        as_typ = as_obj.TypeId
-                        fcl_msg(f"as_typ: {as_typ}\n")
-                        if as_typ == "Assembly::AssemblyObject":
-                            sobj_nm = as_refc[0]
-                            s_obj_ref = f"{as_refc[1]}.{sub_ent[0]}"
-                            found = True
-                        if found:
-                            break
-            else:
-                sobj_nm = obj_nm
-                s_obj_ref = sub_ent[0]
-
-            # TODO: add a check in case of no match?
+            if link_obj is None:
+                msg_box(
+                    self, " ", self.fnt,
+                    (f"<b>{pg_name} - Select Face</b><br><br>"
+                     "The selected face is not part of this assembly."))
+                return False
 
             jnt_elnm = f"joint{self.jnt_ec:02d}{self.jnt_fc:02d}"
-            self.jnt_meta[jnt_elnm] = {}
-            self.jnt_meta[jnt_elnm]["ob_nm"] = sobj_nm
-            self.jnt_meta[jnt_elnm]["ob_ref"] = s_obj_ref
+            self.jnt_meta[jnt_elnm] = {
+                "ob_nm": link_obj.Name,
+                "ob_obj": link_obj,
+                "ob_ref": face_ref,
+            }
             #
             if self.jnt_fc == 1:
                 self.jnt_fc = 2

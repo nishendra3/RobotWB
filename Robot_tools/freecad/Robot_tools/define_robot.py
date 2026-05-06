@@ -516,7 +516,7 @@ class O2PDialog(QDialog):
         # -- update grounded checkbox --
         chb = self.findChild(QObject, "chb_gdj")
         if chb is not None:
-            f = self.flags.get("chb_gdj", True):
+            f = self.flags.get("chb_gdj", True)
             chb.setChecked(f)
             chb.setEnabled(f)
 

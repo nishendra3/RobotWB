@@ -4,12 +4,12 @@ Name: rbt_objects.py
 
 See Changelog below.
 
-Author: Carlo Dormeletti
+Author: Carlo Dormeletti and Nishendra Singh
 Copyright: 2026
-Licence: All right reserved
+Licence: LGPL 2.1
 """
 __version__ = "0.02"
-__build__ = "20260418_1317"
+__build__ = "20260507_1256"
 
 import FreeCADGui as Gui
 import FreeCAD as App

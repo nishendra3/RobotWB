@@ -4,12 +4,12 @@ Name: define_robot.py
 
 See Changelog below.
 
-Author: Carlo Dormeletti
+Author: Carlo Dormeletti and Nishendra Shing
 Copyright: 2026
-Licence: All right reserved
+Licence: LGPL 2.1
 """
 __version__ = "0.15"
-__build__ = "20260507_1229"
+__build__ = "20260507_1254"
 
 
 import sys

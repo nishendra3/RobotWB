@@ -4,12 +4,12 @@ Name: animator.py
 
 See Changelog after import statements.
 
-Author: Carlo Dormeletti
+Author: Carlo Dormeletti and Nishendra Singh
 Copyright: 2026
-Licence: All right reserved
+Licence: LGPL 2.1
 """
 __version__ = "0.07"
-__build__ = "20260428_1248"
+__build__ = "20260507_1256"
 
 
 import pathlib

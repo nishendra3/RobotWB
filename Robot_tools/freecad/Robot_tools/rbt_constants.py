@@ -4,12 +4,12 @@ Name: rbt_constants.py
 
 See Changelog below.
 
-Author: Nishendra Singh
+Author: Carlo Dormeletti and Nishendra Singh
 Copyright: 2026
-Licence: All right reserved
+Licence: LGPL 2.1
 """
 __version__ = "0.01"
-__build__ = "20260505_0803"
+__build__ = "20260507_1256"
 
 ap_clr = {
     "Black": [(0.0, 0.0, 0.0), "#000000"],

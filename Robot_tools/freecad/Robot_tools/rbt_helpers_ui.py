@@ -4,12 +4,12 @@ Name: rbt_helpers_ui.py
 
 See Changelog below.
 
-Author: Nishendra Singh
+Author: Carlo Dormeletti and Nishendra Singh
 Copyright: 2026
-Licence: All right reserved
+Licence: LGPL 2.1
 """
 __version__ = "0.01"
-__build__ = "20260507_1213"
+__build__ = "20260507_1256"
 
 from PySide import QtGui, QtCore  # noqa  # QtWidgets
 from PySide.QtWidgets import (  # noqa

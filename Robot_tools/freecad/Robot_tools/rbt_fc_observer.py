@@ -23,6 +23,7 @@ Changelog:
 v0.01 - Initial version.
 """
 
+
 class RbtObserver:
     """Observer to handle panel refresh on modifications"""
 
@@ -38,7 +39,9 @@ class RbtObserver:
         Refresh the panel after joint deletion
         """
         d = self.dialog
-        if (d.wk_asm_d is None) or (obj.Document is not d.wk_asm_d):
+        if d is None or getattr(d, "wk_asm_d", None) is None:
+            return
+        if obj.Document is not d.wk_asm_d:
             return
         if hasattr(obj, "ObjectToGround") or hasattr(obj, "JointType"):
             # deferred call,  d.refresh_joints_panel()

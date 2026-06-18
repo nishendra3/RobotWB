@@ -34,6 +34,7 @@ def create_default_tool(robot, name="Default_Tool"):
     robot.Active_tool = tool_fpo
     return tool_fpo
 
+
 def import_shape(rob, path):
     """
     import tool geom from .fcstd file
@@ -50,6 +51,7 @@ def import_shape(rob, path):
         fcl_err("no suitable shape in selected file\n")
         return None
     return shapes[0]
+
 
 def import_tool(rob, path):
     """
@@ -166,8 +168,8 @@ class DefineTCP:
         self.tool_shape_lbl = w.tool_shape_lbl
         self.tool_mass = w.tool_mass
 
-        self.tflange_lbl = w.tflange_lbl # tool flange
-        self.tcp_lbl = w.tcp_lbl # tcp on the tool
+        self.tflange_lbl = w.tflange_lbl  # tool flange
+        self.tcp_lbl = w.tcp_lbl  # tcp on the tool
 
         self.tool_off = [w.tool_off_x, w.tool_off_y, w.tool_off_z,
                          w.tool_off_w, w.tool_off_p, w.tool_off_r]
@@ -222,7 +224,8 @@ class DefineTCP:
         fl = self.tool.Tool_flange_link
         if fl and fl[0]:
             sub = fl[1][0] if fl[1] else ""
-            self.tflange_lbl.setText(f"{fl[0].Label}.{sub}" if sub else fl[0].Label)
+            self.tflange_lbl.setText(f"{fl[0].Label}.{sub}"
+                                     if sub else fl[0].Label)
         else:
             self.tflange_lbl.setText("<none>")
 
@@ -230,7 +233,8 @@ class DefineTCP:
         tl = self.tool.TCP_link
         if tl and tl[0]:
             sub = tl[1][0] if tl[1] else ""
-            self.tcp_lbl.setText(f"{tl[0].Label}.{sub}" if sub else tl[0].Label)
+            self.tcp_lbl.setText(f"{tl[0].Label}.{sub}"
+                                 if sub else tl[0].Label)
         else:
             self.tcp_lbl.setText("<none>")
 
@@ -366,7 +370,13 @@ class DefineTCP:
             )
             if not path:
                 return
-            shape = import_shape(self.robot, path)
+
+            try:
+                shape = import_shape(self.robot, path)
+            except Exception as e:
+                fcl_err(f"tool import failed: {e}\n")
+                return
+
             if shape is None:
                 return
 
@@ -410,7 +420,7 @@ class DefineTCP:
         old = self.tool
         self.tool = new_tool
         self.robot.Tools = [t for t in
-                                   self.robot.Tools if t is not old]
+                            self.robot.Tools if t is not old]
         # TODO: check if we have to remove old tools
         self.doc.removeObject(old.Name)
 

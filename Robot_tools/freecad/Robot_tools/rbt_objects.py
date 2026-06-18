@@ -13,6 +13,7 @@ __build__ = "20260508_1337"
 
 import FreeCADGui as Gui
 import FreeCAD as App
+from freecad.Robot_tools.App.rbt_kine import invalidate
 
 # Coin3d import
 from pivy import coin
@@ -65,6 +66,17 @@ class Robot_obj:
             "App::PropertyFloatList", "Robot_home_pos", "Robot",
             "Robot home position angles")
 
+        obj.addProperty(
+            "App::PropertyEnumeration", "Kinematics_lib", "Kinematics",
+            "Solver to use for FK/IK")
+        # add more in future
+        obj.Kinematics_lib = ["pinocchio", "tesseract", "ikpy", "numpy_dls"]
+        obj.Kinematics_lib = "numpy_dls"
+
+        obj.addProperty(
+            "App::PropertyFloatList", "Last_q", "Kinematics",
+            "last valid robot joints (deg) used as seed for next IK")
+
         obj.Proxy = self
 
     def _migrate_from_001(self, obj):
@@ -78,6 +90,13 @@ class Robot_obj:
     def onChanged(self, fp, prop):
         '''Do something when a property has changed'''
         fcl_msg("Change property: " + str(prop) + "\n")
+        if prop in ("Robot_joints", "Robot_joints_dir", "Active_tool",
+                "Kinematics_lib"):
+            try:
+                # TODO: verify if invalidation is really needed
+                invalidate(fp)
+            except Exception:
+                pass
 
     def onDocumentRestored(self, obj):
         if hasattr(obj, "Version") and obj.Version:
@@ -96,6 +115,24 @@ class Robot_obj:
                 "Object version")
             obj.Version = "0.01"
 
+        # when restoring the document, create a default tool
+        # if no active tool is found. TODO: Check if this is
+        # really necessary or not
+        if (App.GuiUp and obj.Robot_joints
+                and obj.Active_tool is None):
+
+            from PySide.QtCode import QTimer  # type: ignore
+
+            def _mk(o=obj):
+                if getattr(o, "Active_tool", None) is None:
+
+                    from freecad.Robot_tools.Gui.define_tool \
+                        import create_default_tool
+
+                    create_default_tool(o, name="Default_Tool")
+
+            QTimer.singleShot(0, _mk)
+
         # -------------------------------------------------
         #   add missing props for back compatability
         # -------------------------------------------------
@@ -112,17 +149,33 @@ class Robot_obj:
             obj.addProperty(
                 "App::PropertyLink", "Active_tool", "Tools",
                 "Currently active tool")
+        if not hasattr(obj, "Kinematics_lib"):
+            obj.addProperty(
+                "App::PropertyEnumeration", "Kinematics_lib", "Kinematics",
+                "Solver to use for FK/IK")
+            obj.Kinematics_lib = ["pinocchio", "tesseract", "ikpy", "numpy_dls"]
+            obj.Kinematics_lib = "numpy_dls"
+        elif hasattr(obj, "Kinematics_lib") and (len(obj.Kinematics_lib) < 4):
+            obj.Kinematics_lib = ["pinocchio", "tesseract", "ikpy", "numpy_dls"]
+            obj.Kinematics_lib = "numpy_dls"
+
+        if not hasattr(obj, "Last_q"):
+            obj.addProperty(
+                "App::PropertyFloatList", "Last_q", "Kinematics",
+                "last valid robot joints (deg) used as seed for next IK")
 
     def execute(self, fp):
         '''Do something when doing a recomputation, this method is mandatory'''
-        fcl_msg("Execute reached\n")  # DBG
-        #
-        if (App.GuiUp
-                and fp.Robot_joints
-                and fp.Active_tool is None):
 
-            from freecad.Robot_tools.Gui.define_tool import create_default_tool
-            create_default_tool(fp, name="Default_Tool")
+        pass
+        # fcl_msg("Execute reached\n")  # DBG
+        #
+        # if (App.GuiUp
+        #         and fp.Robot_joints
+        #         and fp.Active_tool is None):
+
+        #     from freecad.Robot_tools.Gui.define_tool import create_default_tool
+        #     create_default_tool(fp, name="Default_Tool")
 
         # fp.recompute()
 
@@ -181,10 +234,9 @@ class ViewProviderRBo:
 
     def onChanged(self, vp, prop):
         """
-        Print the name of the property that has changed
-        """
 
-        App.Console.PrintMessage("Change property: " + str(prop) + "\n")
+        """
+        fcl_msg("Change property: " + str(prop))
 
     def dumps(self):
         """

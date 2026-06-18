@@ -8,10 +8,22 @@ Author: Carlo Dormeletti and Nishendra Singh
 Copyright: 2026
 Licence:  LGPL 2.1
 """
+from __future__ import annotations
+
 __version__ = "0.01"
 __build__ = "20260507_1255"
 
+import math
+
+from typing import Union, TypeAlias
+
 import FreeCAD as App
+
+V3: TypeAlias = App.Vector
+Number: TypeAlias = Union[int, float]
+MM_PER_M: float = 1000.0
+RAD_PER_DEG: float = math.pi / 180.0
+DEG_PER_RAD: float = 180.0 / math.pi
 
 # ------------------------------------------------
 #               Service functions
@@ -49,3 +61,42 @@ def flip_z_dir(plc):
     """
     flip = App.Placement(App.Vector(), App.Rotation(App.Vector(1, 0, 0), 180))
     return plc.multiply(flip)
+
+
+def mm_to_m(v: Union[Number, V3]) -> Union[float, V3]:
+    """
+        converts mm to m
+        accepts either scalar or vector input
+    """
+    if hasattr(v, "x"):
+        return V3(v.x / MM_PER_M,
+                  v.y / MM_PER_M,
+                  v.z / MM_PER_M)
+    return float(v) / MM_PER_M
+
+
+def m_to_mm(v: Union[Number, V3]) -> Union[float, V3]:
+    """
+        converts m to mm
+        accepts either scalar or vector input
+    """
+    if hasattr(v, "x"):
+        return V3(v.x * MM_PER_M,
+                  v.y * MM_PER_M,
+                  v.z * MM_PER_M)
+    return float(v) * MM_PER_M
+
+
+def deg_to_rad(d: Number) -> float:
+    """
+        converts deg to rad
+    """
+    return float(d) * RAD_PER_DEG
+
+
+def rad_to_deg(d: Number) -> float:
+    """
+        converts rad to deg
+    """
+    return float(d) * DEG_PER_RAD
+

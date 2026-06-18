@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
+    <name>Robot_tools</name>
+    <description>Robot creation and animation</description>
+    <version>0.03</version>
+    <date>2026-05-08</date>
+    <maintainer email="test@mail.com">Carlo Dormeletti and Nishi</maintainer>
+    <license>LGPL-2.1</license>
+
+    <content>
+        <workbench>
+            <name>Robot_tools</name>
+            <subdirectory>freecad/Robot_tools/</subdirectory>
+        </workbench>
+    </content>
+
+    <depend type="python">tesseract-robotics</depend>
+</package>

@@ -386,8 +386,7 @@ class ViewProviderTool:
         fcl_msg(
             f"[drag] {n} solves in {total:.2f}s ({n / total:.1f} fps) | "
             f"ik mean {mean(ik_ms):.1f} / max {max(ik_ms):.1f} ms | "
-            f"apply mean {
-                mean(ap_ms):.1f} / max {max(ap_ms) if ap_ms else 0:.1f} ms | "
+            f"apply mean { mean(ap_ms):.1f} / max {max(ap_ms) if ap_ms else 0:.1f} ms | "
             f"rejected {self._n_reject}\n"
         )
         if getattr(self, "_t_split", None):

@@ -140,7 +140,7 @@ class Robot_obj:
         if (App.GuiUp and obj.Robot_joints
                 and obj.Active_tool is None):
 
-            from PySide.QtCode import QTimer  # type: ignore
+            from PySide.QtCore import QTimer  # type: ignore
 
             def _mk(o=obj):
                 if getattr(o, "Active_tool", None) is None:

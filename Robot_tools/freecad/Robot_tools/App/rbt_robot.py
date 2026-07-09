@@ -7,8 +7,6 @@ Copyright: 2026
 Licence: LGPL 2.1
 """
 
-import FreeCAD as App  # type: ignore
-
 from freecad.Robot_tools.App.rbt_kine import invalidate
 from freecad.Robot_tools.App.rbt_kine_chain import joint_dirs
 from freecad.Robot_tools.App.rbt_global_constants import DEFAULT_KIN_LIB

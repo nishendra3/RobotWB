@@ -17,7 +17,7 @@ from freecad.Robot_tools.App.rbt_kine_types import (
     ChainSpec, JointSpec, LinkSpec
 )
 from freecad.Robot_tools.App.rbt_helpers_math import deg_to_rad
-from Robot_tools.freecad.Robot_tools.App.rbt_helpers_log import fcl_err
+from freecad.Robot_tools.App.rbt_helpers_log import fcl_err
 
 V3: TypeAlias = App.Vector
 Placement: TypeAlias = App.Placement

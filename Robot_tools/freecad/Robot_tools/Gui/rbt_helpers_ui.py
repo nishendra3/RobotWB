@@ -10,7 +10,7 @@ Licence: LGPL 2.1
 """
 
 import os
-import FreeCADGui as Gui
+import FreeCADGui as Gui  # type: ignore
 
 from PySide.QtWidgets import (  # noqa
     QCheckBox,  QFrame, QGroupBox, QLabel,

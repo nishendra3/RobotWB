@@ -7,6 +7,13 @@ Copyright: 2026
 Licence: LGPL 2.1
 """
 
+# TODO: Check the case where user decides
+# to rename the robot default names from
+# below constants
+ROBOT_FPO_NAME = "Robot_FPO"
+ROBOT_ASSEMBLY_LABEL = "Robot_Assembly"
+GROUNDED_JOINT_NAME = "GroundedJoint"
+
 ap_clr = {
     "Black": [(0.0, 0.0, 0.0), "#000000"],
     "Grey75": [(0.25, 0.25, 0.25), "#404040"],

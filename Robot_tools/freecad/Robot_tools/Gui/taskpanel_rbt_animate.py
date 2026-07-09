@@ -47,10 +47,15 @@ VEC0 = V3(0, 0, 0)
 
 
 def create_link_row(dlg, gbx_l, row, fnt, jr, low, hi):
-    """Create a link of buttons for a link."""
+    """
+    Create a row of jog widgets for one joint.
+    params:
+        - jr : 1-based joint index
+    """
+    nm = f"{jr:02d}"
 
     # Col 0 : Joint label
-    lbl_jnt = cm_lbl(dlg, f"lbl_jnt{jr}", "", fnt, 0)
+    lbl_jnt = cm_lbl(dlg, f"lbl_jnt{nm}", "Joint{nm}", fnt, 0)
     lbl_jnt.setFrameShape(QFrame.Shape.Panel)
     lbl_jnt.setFrameShadow(QFrame.Shadow.Sunken)
     lbl_jnt.setStyleSheet("QLabel {background-color: palette(base);"
@@ -59,31 +64,31 @@ def create_link_row(dlg, gbx_l, row, fnt, jr, low, hi):
     gbx_l.addWidget(lbl_jnt, row, 0, 1, 1)
 
     # Col 1 : Angle Spinbox for manual edits
-    dspb_jnt = cm_dspb(dlg, f"dspb_jnt{jr}", fnt, sb_min=low, sb_max=hi)
+    dspb_jnt = cm_dspb(dlg, f"dspb_jnt{nm}", fnt, sb_min=low, sb_max=hi)
     dspb_jnt.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Minimum)
     gbx_l.addWidget(dspb_jnt, row, 1, 1, 1)
 
     # Col 2 : Angle reducing nudger
 
-    btn_jnt_m = cm_tool_btn(dlg, f"btn_jnt_m{jr}", "", fnt)
+    btn_jnt_m = cm_tool_btn(dlg, f"btn_jnt_m{nm}", "", fnt)
     btn_jnt_m.setArrowType(QtCore.Qt.LeftArrow)
     btn_jnt_m.setToolTip(f"min: {low:g}°")
     btn_jnt_m.setFixedWidth(18)
     gbx_l.addWidget(btn_jnt_m, row, 3, 1, 1)
 
     # Col 3 : Angle Slider
-    sl_jnt = cm_slider(dlg, f"sl_jnt{jr}", sl_min=low, sl_max=hi)
+    sl_jnt = cm_slider(dlg, f"sl_jnt{nm}", sl_min=low, sl_max=hi)
     gbx_l.addWidget(sl_jnt, row, 4, 1, 1)
 
     # col 4 : Angle increasing nudger
-    btn_jnt_p = cm_tool_btn(dlg, f"btn_jnt_p{jr}", "", fnt)
+    btn_jnt_p = cm_tool_btn(dlg, f"btn_jnt_p{nm}", "", fnt)
     btn_jnt_p.setArrowType(QtCore.Qt.RightArrow)
     btn_jnt_p.setToolTip(f"max: {hi:g}°")
     btn_jnt_p.setFixedWidth(18)
     gbx_l.addWidget(btn_jnt_p, row, 5, 1, 1)
 
     # col 6 — flip toggle (checked == reversed direction)
-    chk_flip = cm_toggle(dlg, f"chk_flip{jr}", fnt)
+    chk_flip = cm_toggle(dlg, f"chk_flip{nm}", fnt)
     gbx_l.addWidget(chk_flip, row, 7, 1, 1)
 
 # ---------------------------------------------
@@ -239,7 +244,7 @@ class AnimationTaskPanel:
         for idx, jnm in enumerate(self.ctrl.j_nms):
             low, hi = joint_limits_q_deg(self.robot, idx)
             create_link_row(self.form, tp_gb0l, brow, self.fnt,
-                            jnm, low, hi)
+                            idx + 1, low, hi)
             brow += 1
 
         # -- one row gap --

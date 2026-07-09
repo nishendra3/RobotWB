@@ -6,7 +6,7 @@ kinematics module for robot wb
 from __future__ import annotations
 
 import traceback
-from typing import Dict, List, Optional, Tuple, Type, TypeAlias
+from typing import Dict, List, Optional, Tuple, TypeAlias
 
 import FreeCAD as App  # type: ignore
 

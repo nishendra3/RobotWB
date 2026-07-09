@@ -13,7 +13,7 @@ from PySide.QtWidgets import (  # type: ignore
 from freecad.Robot_tools.App.rbt_creator import RobotCreator
 from freecad.Robot_tools.Gui.rbt_fc_observer import (
     RbtObserver, RbtSelectionObserver)
-from Robot_tools.freecad.Robot_tools.App.rbt_helpers_log import fcl_warn
+from freecad.Robot_tools.App.rbt_helpers_log import fcl_warn
 from freecad.Robot_tools.Gui.rbt_helpers_ui import (
     load_panel_ui, get_file, msg_box, set_txt_color)
 

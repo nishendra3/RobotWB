@@ -252,12 +252,20 @@ def apply_joint_angles(rbt_obj, q_deg):
             part.Placement = F.multiply(off)
             part.purgeTouched()  # prevent assm recompute
 
+    # update the tool placement
     tool = getattr(rbt_obj, "Active_tool", None)
     if tool is not None:
         tool.TCP_placement = (p_asm_in_world(rbt_obj)
                               .multiply(F)
                               .multiply(chain.flange_local))
         # tool.recompute()
+
+    # update the joint markers
+    if App.GuiUp:
+        for jnt in (rbt_obj.Robot_joints or []):
+            proxy = getattr(jnt.ViewObject, "Proxy", None)
+            if hasattr(proxy, "redrawJointPlacements"):
+                proxy.redrawJointPlacements(jnt)
 
 
 def resolve_offsets(rbt_obj, q_deg):

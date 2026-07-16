@@ -29,6 +29,8 @@ ROBOT_SCHEMA = [
      "Robot", "Joint direction sign (+1/-1) per joint"),
     ("Robot_home_pos", "App::PropertyFloatList",
      "Robot", "Home position (revolute: deg, slider: mm)"),
+    ("Robot_zero_pose", "App::PropertyFloatList",
+     "Robot", "Robot pose that is to be taken as null reference"),
 
     # tool handling properties
     ("Tools", "App::PropertyLinkListGlobal",
@@ -82,7 +84,7 @@ class Robot:
             # asm stays, only frame moves
             pull_base_placement(obj)
 
-        if prop in ("Robot_joints", "Robot_joints_dir",
+        if prop in ("Robot_joints", "Robot_joints_dir", "Robot_zero_pose",
                     "Active_tool", "Kinematics_lib"):
             try:
                 invalidate(obj)

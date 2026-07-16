@@ -13,6 +13,7 @@ _SYNC = False  # guard flag to prevent recursion
 _observer = None
 
 
+# REMOVE: Legacy Path --------
 def find_grounded_joint(asm):
     """
     Search which object is the ground link
@@ -26,6 +27,7 @@ def find_grounded_joint(asm):
 
     return next((o for o in jg.Group
                  if hasattr(o, "ObjectToGround")), None)
+# ----------------------------
 
 
 def is_grounded_datum(obj, asm):
@@ -50,6 +52,29 @@ def is_grounded_datum(obj, asm):
     return getattr(obj, "MapMode", None) in (None, "Deactivated")
 
 
+def is_base_joint(joint, asm):
+    """
+    True if the joint's Reference1 is the
+    grounded BaseFrame datum
+    """
+    refs = getattr(joint, "Reference1", None)
+    return bool(refs) and is_grounded_datum(refs[0], asm)
+
+
+def joint_dir(joint):
+    """
+    +1/-1 jog direction from the parent robot obj
+    default: +1
+    """
+    for fpo in joint.Document.findObjects("App::FeaturePython"):
+        js = getattr(fpo, "Robot_joints", None)
+        if js and joint in js:
+            dirs = getattr(fpo, "Robot_joints_dir", ())
+            i = list(js).index(joint)
+            return dirs[i] if i < len(dirs) else 1
+    return 1
+
+
 def chain_root(rbt_obj):
     """Reference1 obj of the first robot joint, or None"""
     joints = list(getattr(rbt_obj, "Robot_joints", None) or [])
@@ -61,7 +86,7 @@ def chain_root(rbt_obj):
 def base_link(robot):
     """
     identify the base link for given robot obj
-    priority order: BaseFrame Dautm -> GroundedJoint -> First Ref1
+    priority order: BaseFrame Datum -> GroundedJoint -> First Ref1
     """
     asm = getattr(robot, "Robot_assembly", None)
     root = chain_root(robot)
@@ -69,9 +94,11 @@ def base_link(robot):
     if is_grounded_datum(root, asm):
         return root
 
+    # REMOVE: Legacy Path -------------
     gj = find_grounded_joint(getattr(robot, "Robot_assembly", None))
     if gj is not None and gj.ObjectToGround is not None:
         return gj.ObjectToGround
+    # ---------------------------------
 
     return root
 
@@ -100,7 +127,7 @@ def get_base_placement(robot):
             bl is None):
         return None
 
-    # bl.Placement places base CAD in asm, frozen when Grounded joint
+    # bl.Placement places base CAD in asm, frozen when BaseFrame
     # is made moving baselink placement moves the whole geometry
     #
     # Base_offset places the frame on that link relative to its CAD

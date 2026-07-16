@@ -10,6 +10,7 @@ from freecad.Robot_tools.App.rbt_tool import (
 from freecad.Robot_tools.App.rbt_creator_geom import find_center
 from freecad.Robot_tools.App.rbt_helpers_log import (
     fcl_err, fcl_warn)
+from freecad.Robot_tools.Gui.rbt_helpers_ui import is_alive
 
 
 # helpers
@@ -275,6 +276,8 @@ class DefineTCP:
         self.recompute()
 
     def accept(self):
+        if not is_alive(self.doc):
+            return self.reject()
         if not self.inEdit:
             name = self.tool_name.text().strip()
             if name and name != self.tool.Label:
@@ -286,7 +289,8 @@ class DefineTCP:
         return True
 
     def reject(self):
-        self.doc.abortTransaction()
+        if is_alive(self.doc):
+            self.doc.abortTransaction()
         Gui.Control.closeDialog()
         return True
 

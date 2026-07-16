@@ -47,6 +47,15 @@ class RbtObserver:
         link_nm = obj.Name if obj.isDerivedFrom("App::Link") else None
         QTimer.singleShot(0, lambda: d.on_obj_deleted(is_joint, link_nm))
 
+    def slotDeletedDocument(self, doc):
+        """
+        close the panel when working doc is closed
+        """
+        d = self.dialog
+        if d is None or doc is not getattr(d, "doc", None):
+            return
+        QTimer.singleShot(0, d.on_doc_closed)
+
 
 class RbtSelectionObserver:
     """

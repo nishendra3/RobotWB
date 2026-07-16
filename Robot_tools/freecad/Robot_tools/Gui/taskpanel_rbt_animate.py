@@ -31,12 +31,12 @@ from freecad.Robot_tools.App.rbt_robot import is_robot
 from freecad.Robot_tools.App.rbt_kine import (
     joint_limits_q_deg, curr_joint_vals_doc,
     save_home, home_q_deg, joint_dirs, jog_q_deg,
-    resolve_offsets
+    resolve_offsets, set_zero_pose
 )
 from freecad.Robot_tools.App.rbt_kine_types import (
     PRISMATIC, REVOLUTE, FIXED, joint_type_FC2WB)
 from freecad.Robot_tools.App.rbt_helpers_log import (
-    fcl_err, fcl_msg)
+    fcl_err, fcl_msg, fcl_warn)
 
 V3 = App.Vector
 Rotation = App.Rotation
@@ -148,8 +148,18 @@ class AnimationController:
         resolve_offsets(self.robot, self.j_vals)
 
     def go_home_pos(self):
-        """Set home pos joint angle values"""
-        self.j_vals = list(home_q_deg(self.robot))
+        """
+        home pos, clampled to joint limits
+        """
+        q = list(home_q_deg(self.robot))
+        for i in range(self.j_num):
+            low, high = joint_limits_q_deg(self.robot, i)
+            c = max(low, min(high, q[i]))
+            if c != q[i]:
+                fcl_warn(f"J{i+1} home {q[i]:g} outside "
+                         f"[{low:g}, {high:g}], clamped to {c:g}\n")
+            q[i] = c
+        self.j_vals = q
         jog_q_deg(self.robot, self.j_vals)
         self.commit_joints()
 
@@ -298,8 +308,17 @@ class AnimationTaskPanel:
                              "Go Home",  self.fnt)
         btn_home_set = cm_btn(self.form, "btn_home_set",
                               "Set Home", self.fnt)
+        btn_zero_set = cm_btn(self.form, "btn_zero_set", "Set Zero",
+                              self.fnt)
+        btn_zero_set.setToolTip(
+            "Make the current pose the robot's zero pose: all joints\n"
+            "read 0 here, and limits/home are measured from it\n"
+            "('mastering' on industrial robots).\n"
+            "The Assembly joint dialog keeps showing raw values")
+
         tb_lay.addWidget(btn_home_go)
         tb_lay.addWidget(btn_home_set)
+        tb_lay.addWidget(btn_zero_set)
 
         # spacing
         tb_lay.addSpacing(12)
@@ -320,6 +339,7 @@ class AnimationTaskPanel:
         btn_jnts_rld.clicked.connect(self._on_reload_dirs)
         btn_home_go.clicked.connect(self._on_go_home)
         btn_home_set.clicked.connect(self._on_set_home)
+        btn_zero_set.clicked.connect(self._on_set_zero)
         dspb_step.valueChanged.connect(self._on_step_changed)
 
         # column stretch handler
@@ -442,6 +462,13 @@ class AnimationTaskPanel:
     def _on_set_home(self):
         self.ctrl.commit_joints()
         save_home(self.robot)
+
+    def _on_set_zero(self):
+        self.ctrl.commit_joints()         # pose -> Offset2 first
+        set_zero_pose(self.robot)         # snapshot raw as zero pose
+        self.ctrl.sync_joints_from_doc()  # j_vals re-read -> ~0.0
+        for j_n in range(self.ctrl.j_num):
+            self.refresh_row_limits(j_n)  # re-center sliders/spinboxes
 
     def _on_go_home(self):
         self.ctrl.go_home_pos()

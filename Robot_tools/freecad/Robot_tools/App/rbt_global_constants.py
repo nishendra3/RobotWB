@@ -12,8 +12,16 @@ Licence: LGPL 2.1
 # below constants
 ROBOT_FPO_NAME = "Robot_FPO"
 ROBOT_ASSEMBLY_LABEL = "Robot_Assembly"
-GROUNDED_JOINT_NAME = "GroundedJoint"
+GROUNDED_JOINT_NAME = "GroundedJoint"   # REMOVE: Legacy Path
 BASE_FRAME_NAME = "BaseFrame"
+
+
+RBT_PREFS = "User parameter:BaseApp/Preferences/Mod/Robot_tools"
+
+# stagger percentage for new parts added to asm (0-100)
+# 0 = parts at their CAD file pose
+# >0 = parts staggered away from prev added part
+DEFAULT_INSERT_STAGGER_PCT = 0.0
 
 MM_PER_M = 1000.0
 DEFAULT_SLIDER_TRAVEL_MM = 500

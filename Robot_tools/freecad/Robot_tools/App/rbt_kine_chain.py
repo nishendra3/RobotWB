@@ -56,6 +56,7 @@ def extract_chain(robot_obj: "App.DocumentObject") -> Optional[ChainSpec]:
                                       parent_name=None)]
     joints: List[JointSpec] = []
     dirs: List[int] = joint_dirs(robot_obj)
+    zeros: List[float] = joint_zeros(robot_obj)
 
     prev_joint_in_asm: Placement = base_in_asm
     prev_axis, prev_q, prev_jtype = None, 0, None
@@ -82,8 +83,7 @@ def extract_chain(robot_obj: "App.DocumentObject") -> Optional[ChainSpec]:
         d = dirs[idx]
         jtype = joint_type_FC2WB(j.JointType)
         axis: V3 = joint_axis(joint_in_asm, jcs2_in_asm, d)
-        q = joint_value_doc(j, d)
-
+        q = joint_value_doc(j, d, zeros[idx])
 
         # prev joint frame -> this joint frame
         # relative placement from prev to this joint frame
@@ -162,16 +162,16 @@ def joint_axis(joint_in_asm, jcs2_in_asm, d):
     return V3(0, 0, (1 if z_dot < 0 else -1) * d)
 
 
-def joint_value_doc(j, d):
+def joint_value_doc(j, d, z=0.0):
     """
-    current joint angle
-    q = dir * Offset2 | z
+    current joint value
+    q = dir * (raw - zero); raw = Offset2 (Yaw | Z)
     """
     jt = joint_type_FC2WB(j.JointType)
     if jt == REVOLUTE:
-        return d * float(j.Offset2.Rotation.toEuler()[0])
+        return d * (float(j.Offset2.Rotation.toEuler()[0])-z)
     if jt == PRISMATIC:
-        return d * float(j.Offset2.Base.z)
+        return d * (float(j.Offset2.Base.z)-z)
     return 0.0
 
 
@@ -210,6 +210,20 @@ def joint_dirs(robot_obj: "App.DocumentObject") -> List[int]:
     dirs += [1] * (len(joints) - len(dirs))
 
     return [-1 if d < 0 else 1 for d in dirs]
+
+
+def joint_zeros(robot_obj: "App.DocumentObject") -> List[float]:
+    """
+    Return the Offset2 values
+    corresponding to q = 0 for each joint
+    """
+    n = len(robot_obj.Robot_joints or ())
+    zeros = list(getattr(robot_obj, "Robot_zero_pose", ())[:n])
+
+    if len(zeros) < n:
+        zeros.extend([0.0] * (n - len(zeros)))
+
+    return [float(z) for z in zeros]
 
 
 def joint_limits_doc(j: "App.DocumentObject") -> tuple:

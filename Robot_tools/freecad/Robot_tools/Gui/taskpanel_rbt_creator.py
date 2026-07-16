@@ -17,7 +17,9 @@ from freecad.Robot_tools.Gui.rbt_fc_observer import (
     RbtObserver, RbtSelectionObserver)
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_warn
 from freecad.Robot_tools.Gui.rbt_helpers_ui import (
-    load_panel_ui, get_file, msg_box, set_txt_color)
+    load_panel_ui, get_file, msg_box, set_txt_color,
+    joint_type_icon, is_alive)
+from freecad.Robot_tools.App.rbt_placement import is_base_joint
 from freecad.Robot_tools.App.rbt_kine_types import REVOLUTE, PRISMATIC, FIXED
 
 # --------------------------------------------------------------
@@ -52,7 +54,7 @@ GUIDANCE = {
     #    => built dynamically later
 
     CreationStep.REVIEW:
-        "review the joints. 'Finish' commits & 'Cancel' discards everything",
+        "review the joints. 'Finish' commits & 'Cancel' discards everything.",
 }
 
 SHOWN_FC_TYPES = ("Part::Feature", "App::Part", "App::DocumentObjectGroup")
@@ -146,6 +148,13 @@ class DefineRobot:
         self.joints_table = w.jointsTable
         self.status_label = w.statusLabel
         self.joint_type_combo = w.jointTypeCombo
+
+        # set icons
+        jtypes = self.joint_type_combo.count()
+        for i in range(jtypes):
+            txt = self.joint_type_combo.itemText(i)
+            ico = joint_type_icon(txt)
+            self.joint_type_combo.setItemIcon(i, ico)
 
         # parts import from components file
         self.parts_list = w.partsList
@@ -349,21 +358,20 @@ class DefineRobot:
 
     def place_link(self, link):
         """
-        Insert new link in the style of FreeCAD
+        Place new link at the source part's CAD-file pose
+        plus the user-configurable stagger offset
         """
-        view = Gui.activeView()
-        if view is None or not hasattr(view, "getPointOnFocalPlane"):
+        src = link.LinkedObject
+        if src is None:
             return
-        x, y = view.getSize()
-        center = view.getPointOnFocalPlane(x//2, y//2)
-        corner = view.getPointOnFocalPlane(x, y)
-        translation = self.creator.stack_translation(link, center, corner)
-        ox, oy = view.getPointOnViewport(App.Vector() + translation)
-        if 0 < ox < x and 0 < oy < y:
-            link.Placement.Base = self.creator.total_translation
-        else:
-            bbc = link.ViewObject.getBoundingBox().Center
-            link.Placement.Base = center - bbc + self.creator.total_translation
+
+        # global pose
+        # src maybe nested inside Std part container
+        plc = (src.getGlobalPlacement()
+               if hasattr(src, "getGlobalPlacement")
+               else App.Placement(src.Placement))
+        plc.Base += self.creator.stack_translation(link)
+        link.Placement = plc
 
     def fit_view(self):
         """
@@ -484,10 +492,12 @@ class DefineRobot:
                     or self.creator.has_grounded_datum())
         self.grounded_check.setEnabled(not has_base)
         self.grounded_check.setChecked(not has_base)
+
+        # REMOVE: Legacy Path --------
         if grounded is not None:
             self.add_joint_row(["0", "grounded", "--", "--"],
-                               grounded,
-                               True)
+                               grounded)
+        # ----------------------------
 
         for idx, j in enumerate(asm.Joints):
             if j.Label2[:6] != "rb_jnt":
@@ -495,8 +505,7 @@ class DefineRobot:
             r1 = f"{j.Reference1[0].Name}.{j.Reference1[1][0]}"
             r2 = f"{j.Reference2[0].Name}.{j.Reference2[1][0]}"
             self.add_joint_row([str(idx+1), str(j.JointType), r1, r2],
-                               j,
-                               False)
+                               j)
 
     def refresh_available_parts(self):
         self.parts_list.clear()
@@ -545,14 +554,23 @@ class DefineRobot:
         t.setTextElideMode(Qt.ElideRight)
         t.setWordWrap(False)
 
-    def add_joint_row(self, cells, obj, grounded):
+    def add_joint_row(self, cells, obj):
+
+        is_grounded = hasattr(obj, "ObjectToGround")  # REMOVE: Legacy
+        is_base = is_grounded or is_base_joint(obj, self.creator.assembly)
+
         t = self.joints_table
         row = t.rowCount()
         t.insertRow(row)
         for col, val in enumerate(cells):
-            t.setItem(row, col, QTableWidgetItem(str(val)))
+            item = QTableWidgetItem(str(val))
+            if col == 1:
+                icon = "Base" if is_base else str(val)
+                item.setIcon(joint_type_icon(icon))
+            t.setItem(row, col, item)
 
-        if not grounded:
+        # GroundedJoint has no Reference2, flip would crash
+        if not is_grounded:
             fbtn = QPushButton("Flip")
             fbtn.setToolTip("Flip the part to mate from otherside")
             fbtn.clicked.connect(lambda _=False,
@@ -561,8 +579,8 @@ class DefineRobot:
 
         btn = QPushButton("X")
         btn.clicked.connect(
-            lambda _=False, o=obj, g=grounded:
-                self.creator.delete_joint(o, g))
+            lambda _=False, o=obj:
+                self.creator.delete_joint(o))
         t.setCellWidget(row, t.columnCount() - 1, btn)
 
     # UI state handlers
@@ -691,6 +709,11 @@ class DefineRobot:
     # task panel lifecylce
 
     def accept(self):
+        # check if the doc is still open
+        if not is_alive(self.doc):
+            return self.reject()
+
+        # check if a valid robot asm exists
         if not self.creator.is_valid_robot():
             msg_box(self.form, " ", self.form.font(),
                     """
@@ -699,6 +722,7 @@ class DefineRobot:
                     """)
             return False
 
+        # commit the changes to the file
         from freecad.Robot_tools.App.rbt_placement import pull_base_placement
         pull_base_placement(self.creator.fpo)
 
@@ -712,20 +736,22 @@ class DefineRobot:
     def reject(self):
         Gui.Selection.removeSelectionGate()
         self.teardown_observer()
-        self.doc.abortTransaction()
 
-        # if new file was created (owner=True), but not
-        # saved - drop file. If it was saved by user
-        # then it needs to be deleted by the user on their own
+        if is_alive(self.doc):
+            self.doc.abortTransaction()
 
-        if self.doc_owner and not self.doc.FileName:
-            App.closeDocument(self.doc.Name)
-        else:
-            for name in list(self.imported_names):
-                if self.doc.getObject(name):
-                    self.doc.removeObject(name)
+            # if new file was created (owner=True), but not
+            # saved - drop file. If it was saved by user
+            # then it needs to be deleted by the user on their own
 
-            self.doc.recompute()
+            if self.doc_owner and not self.doc.FileName:
+                App.closeDocument(self.doc.Name)
+            else:
+                for name in list(self.imported_names):
+                    if self.doc.getObject(name):
+                        self.doc.removeObject(name)
+
+                self.doc.recompute()
 
         Gui.Control.closeDialog()
         return True
@@ -756,6 +782,11 @@ class DefineRobot:
             self.creator.on_link_removed(link_name)
             self.update_ui()
             # self.fit_view() -> enables fitAll after deletion
+
+    def on_doc_closed(self):
+        if self.doc_observer is None:
+            return  # session already closing down
+        self.reject()   # doc is dead already
 
 
 def run():

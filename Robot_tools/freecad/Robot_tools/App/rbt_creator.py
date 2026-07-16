@@ -13,7 +13,11 @@ from freecad.Robot_tools.App.rbt_creator_asm import (
     find_assemblies)
 from freecad.Robot_tools.App.rbt_creator_jnt import add_joint
 from freecad.Robot_tools.App.rbt_global_constants import (
-    ROBOT_FPO_NAME, BASE_FRAME_NAME)
+    ROBOT_FPO_NAME, BASE_FRAME_NAME, RBT_PREFS,
+    DEFAULT_INSERT_STAGGER_PCT)
+from freecad.Robot_tools.App.rbt_placement import (
+    is_grounded_datum, chain_root, find_grounded_joint)
+from freecad.Robot_tools.App.rbt_kine_chain import joint_value_doc
 
 
 class RobotCreator:
@@ -27,10 +31,10 @@ class RobotCreator:
         self.asm_doc = self.assembly = self.fpo = None
 
         # insert-stacking state for links in the robot
-        self.insertion_stack = []
+        # link Name -> stagger offset at insert time
+        self.insert_offsets = {}
 
         self.total_translation = App.Vector()
-        self.prev_screen_center = App.Vector()
 
     def part_count(self):
         """
@@ -51,19 +55,19 @@ class RobotCreator:
                    if o.isDerivedFrom("App::Link") and
                    o.LinkedObject is obj)
 
+    # REMOVE: Legacy Path ----------
     def grounded_joint(self):
         """The assembly's GroundedJoint object, or None."""
-        from freecad.Robot_tools.App.rbt_placement import find_grounded_joint
         return find_grounded_joint(self.assembly)
+    # ------------------------------
 
     def has_grounded_datum(self):
-        from freecad.Robot_tools.App.rbt_placement import (
-            is_grounded_datum, chain_root)
         return is_grounded_datum(chain_root(self.fpo), self.assembly)
 
     def is_valid_robot(self):
         """
-        Valid Robot : Grounded Base + At least one valid joint
+        Valid Robot : BaseFrame Datum or legacy grounded joint
+        At least one valid joint
         """
         a, f = self.assembly, self.fpo
 
@@ -140,7 +144,10 @@ class RobotCreator:
         """
         lcs = add_base_frame(self.assembly, pick)
         z_axis = next(f for f in lcs.OriginFeatures if f.Role == "Z_Axis")
-        return self.insert_joint(jtype, [(lcs, z_axis.Name+"."), pick], label)
+        base_joint = self.insert_joint(jtype,
+                                       [(lcs, z_axis.Name+"."), pick], label)
+        base_joint.Label = "Base_joint"
+        return base_joint
 
     def insert_joint(self, jtype, refs, label=""):
         """
@@ -148,13 +155,10 @@ class RobotCreator:
         in the assembly & registers them with FPO
         """
         j = add_joint(self.assembly, jtype, refs, label)
-        if jtype != "grounded":
-            self.fpo.Robot_joints = list(
-                self.fpo.Robot_joints
-            ) + [j]
-            self.fpo.Robot_joints_dir = list(
-                self.fpo.Robot_joints_dir
-            ) + [1]
+        self.fpo.Robot_zero_pose = (list(self.fpo.Robot_zero_pose)
+                                    + [joint_value_doc(j, 1)])
+        self.fpo.Robot_joints = list(self.fpo.Robot_joints) + [j]
+        self.fpo.Robot_joints_dir = list(self.fpo.Robot_joints_dir) + [1]
         return j
 
     def next_joint_index(self):
@@ -175,11 +179,11 @@ class RobotCreator:
             from freecad.Robot_tools.App import rbt_kine
             rbt_kine.invalidate(self.fpo)
 
-    def delete_joint(self, obj, grounded=False):
+    def delete_joint(self, obj):
         """Remove a joint and keep robot joints/directions in sync."""
         doc = self.assembly.Document
 
-        if not grounded and self.fpo and obj in self.fpo.Robot_joints:
+        if self.fpo and obj in self.fpo.Robot_joints:
             joints = list(self.fpo.Robot_joints)
             dirs = list(self.fpo.Robot_joints_dir)
 
@@ -190,6 +194,11 @@ class RobotCreator:
 
             self.fpo.Robot_joints = joints
             self.fpo.Robot_joints_dir = dirs
+
+            zeros = list(self.fpo.Robot_zero_pose)
+            if idx < len(zeros):
+                zeros.pop(idx)
+                self.fpo.Robot_zero_pose = zeros
 
         # read frame before the joint deletion
         refs = getattr(obj, "Reference1", None)
@@ -206,39 +215,31 @@ class RobotCreator:
 
         doc.recompute()
 
-    def stack_translation(self, link, screen_center, screen_corner):
+    def stack_translation(self, link):
         """
-        stack the new added links in the style of assembly wb
-        first link at origin
-        later ones at 15% of bbox offsets
+        accumulated insert offset
+        first link stays at its CAD file pose, the later ones
+        offset by the user-set stagger percent (0 = disabled)
         """
-        translation = App.Vector()
-        reset_thresh = (screen_corner - screen_center).Length * 0.1
-        if not self.insertion_stack:
-            # first insertion: at origin
-            pass
-        elif (self.prev_screen_center - screen_center).Length > reset_thresh:
-            self.total_translation = App.Vector()
-        else:
-            translation = self.translation_vec(link)
-
-        self.insertion_stack.append(
-            {"link": link.Name, "translation": translation}
-        )
+        translation = (App.Vector() if not self.insert_offsets
+                       else self.translation_vec(link))
+        self.insert_offsets[link.Name] = translation
         self.total_translation += translation
-        self.prev_screen_center = screen_center
-        return translation
+        return App.Vector(self.total_translation)
 
     def translation_vec(self, link):
         """
-        offset calculations for adding new part to robot
-        when we are first making the assembly
-        15% offset from the bbox
-        default offset of 10 mm
+        offset for a newly inserted part
+        InsertStaggerPct % of its bbox, 10mm fallback
         """
+        pct = App.ParamGet(RBT_PREFS).GetFloat(
+            "InsertStaggerPct", DEFAULT_INSERT_STAGGER_PCT
+        )
+        if pct <= 0:
+            return App.Vector()
         shape = getattr(link, "Shape", None)
         bb = shape.BoundBox if shape is not None else None
-        t = ((bb.XMax + bb.YMax + bb. ZMax) * 0.15
+        t = ((bb.XMax + bb.YMax + bb. ZMax) * pct / 100.0
              if bb is not None and bb.isValid() else 10)
         return App.Vector(t, t, t)
 
@@ -254,28 +255,15 @@ class RobotCreator:
         return links[-1] if links else None
 
     def joints_ref(self, link):
-        """
-        for each link, get [(joint, is_grounded)] for attached joints
-        """
+        """all joints attached to the link"""
         out = []
-        g = self.grounded_joint()
-        if (g is not None and
-                getattr(g, "ObjectToGround", None) is link):
-            out.append((g, True))
-
         for joint in self.assembly.Joints:
-
-            if hasattr(joint, "ObjectToGround"):
+            if hasattr(joint, "ObjectToGround"):   # legacy, skip
                 continue
-
-            refs = (
-                getattr(joint, "Reference1", None),
-                getattr(joint, "Reference2", None),
-            )
-
+            refs = (getattr(joint, "Reference1", None),
+                    getattr(joint, "Reference2", None))
             if any(ref and ref[0] is link for ref in refs):
-                out.append((joint, False))
-
+                out.append(joint)
         return out
 
     def remove_link(self, link):
@@ -283,8 +271,8 @@ class RobotCreator:
         delete all attached joints to the link
         and then the link itself
         """
-        for joint, is_grounded in self.joints_ref(link):
-            self.delete_joint(joint, is_grounded)
+        for joint in self.joints_ref(link):
+            self.delete_joint(joint)
 
         doc = link.Document
         self.on_link_removed(link.Name)
@@ -293,15 +281,9 @@ class RobotCreator:
 
     def on_link_removed(self, name):
         """
-        remove the link from the stack
+        forget the removed link's stagger offset
         """
-        stack_len = len(self.insertion_stack)
-        for i in reversed(range(stack_len)):
-            if self.insertion_stack[i]["link"] == name:
-                self.total_translation -= \
-                    self.insertion_stack[i]["translation"]
-                del self.insertion_stack[i]
-                break
+        self.total_translation -= self.insert_offsets.pop(name, App.Vector())
 
     def track_imported(self, before_names):
         """

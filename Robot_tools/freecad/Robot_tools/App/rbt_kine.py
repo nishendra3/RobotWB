@@ -14,7 +14,8 @@ from freecad.Robot_tools.App.rbt_kine_types import (
     ChainSpec, joint_type_FC2WB, REVOLUTE, PRISMATIC, FIXED)
 from freecad.Robot_tools.App.rbt_kine_chain import (
     extract_chain, joint_dirs, joint_limits_doc,
-    joint_value_doc, q_doc_to_si, q_si_to_doc)
+    joint_value_doc, q_doc_to_si, q_si_to_doc,
+    joint_zeros)
 from freecad.Robot_tools.App.rbt_helpers_math import deg_to_rad
 from freecad.Robot_tools.backends import load_kinematics_lib
 from freecad.Robot_tools.backends.base import KinematicsBackend
@@ -149,17 +150,16 @@ def invalidate(rbt_obj: "App.DocumentObject") -> None:
 
 def curr_joint_vals_doc(rbt_obj: "App.DocumentObject") -> List[float]:
     """
-        joint values in doc units
-        q = dir * Offset2 (yaw deg | z mm)
+    joint values in doc units, measured from the zero pose
+    q = dir * (raw - zero), raw = Offset2 yaw deg | z mm
     """
-    return [joint_value_doc(j, d)
-            for d, j in zip(joint_dirs(rbt_obj), rbt_obj.Robot_joints)]
+    return [joint_value_doc(j, d, z)
+            for d, z, j in zip(joint_dirs(rbt_obj), joint_zeros(rbt_obj),
+                               rbt_obj.Robot_joints)]
 
 
 def joint_limits_q_deg(rbt_obj, j_idx: int):
-    """
-    q-space limits, considering direction into account
-    """
+    """q-space limits (about the zero pose), direction flipped"""
     low, high = joint_limits_doc(rbt_obj.Robot_joints[j_idx])
     if joint_dirs(rbt_obj)[j_idx] == -1:
         low, high = -high, -low
@@ -174,17 +174,37 @@ def jog_q_deg(rbt_obj, q_deg):
         tool.recompute()
 
 
+def raw_pose(rbt_obj) -> List[float]:
+    """
+    current raw Offset2 values (yaw deg | z mm), dir-less
+    """
+    return [joint_value_doc(j, 1) for j in rbt_obj.Robot_joints]
+
+
 def save_home(rbt_obj) -> None:
-    """Robot_home_pos in FC yaw convention"""
-    rbt_obj.Robot_home_pos = [joint_value_doc(j, 1)
-                              for j in rbt_obj.Robot_joints]
+    """
+    save current pose as home position
+    """
+    rbt_obj.Robot_home_pos = raw_pose(rbt_obj)
+
+
+def set_zero_pose(rbt_obj) -> None:
+    """
+    save current pose as zero (null) reference
+    """
+    rbt_obj.Robot_zero_pose = raw_pose(rbt_obj)
 
 
 def home_q_deg(rbt_obj) -> List[float]:
-    """q_home = dir * stored yaw home pos"""
+    """
+    q_home = dir * (stored raw home - zero)
+    for unset home pos --> zero pose
+    """
+    zeros = joint_zeros(rbt_obj)
     home = list(rbt_obj.Robot_home_pos or [])
-    home += [0.0] * (len(rbt_obj.Robot_joints) - len(home))
-    return [d * float(y) for d, y in zip(joint_dirs(rbt_obj), home)]
+    home += zeros[len(home):]
+    return [d * (float(y)-z)
+            for d, y, z in zip(joint_dirs(rbt_obj), home, zeros)]
 
 
 def get_chain(rbt_obj):
@@ -252,9 +272,10 @@ def resolve_offsets(rbt_obj, q_deg):
     prefs.SetBool("SolveInJointCreation", False)  # avoid calculation at start
     try:
         dirs = joint_dirs(rbt_obj)
+        zeros = joint_zeros(rbt_obj)
         for i, joint in enumerate(rbt_obj.Robot_joints):
             jt = joint_type_FC2WB(joint.JointType)
-            off = dirs[i]*q_deg[i]
+            off = dirs[i]*q_deg[i] + zeros[i]
             if jt == REVOLUTE:
                 joint.Offset2 = App.Placement(joint.Offset2.Base,
                                               App.Rotation(off, 0, 0))

@@ -11,6 +11,7 @@ from freecad.Robot_tools.App.rbt_helpers_log import fcl_err, fcl_msg
 from freecad.Robot_tools.App.rbt_helpers_frames import jog_rotation
 from freecad.Robot_tools.App.rbt_tool import tool_parent
 from freecad.Robot_tools.Gui.taskpanel_rbt_tool import DefineTCP
+from freecad.Robot_tools.Gui import so_helpers as so
 
 # import kinematic library functions
 from freecad.Robot_tools.App import rbt_kine
@@ -24,6 +25,10 @@ MARKER_GRAB_R_MM = 1.5 * MARKER_RADIUS_MM  # Grabale region around TCP
 
 AXIS_UNITS = [(1, 0, 0), (0, 1, 0), (0, 0, 1)]
 AXIS_COLORS = [(1, 0, 0), (0, .8, 0), (.2, .4, 1)]
+
+# AXIS DRAGGERS DIMENSIONS
+SHAFT_LEN, SHAFT_R = 30.0, 1.0
+TIP_H, TIP_R = 10.0, 4.0
 
 
 class DragMode(IntEnum):
@@ -72,7 +77,6 @@ class ViewProviderTool:
         self.axes_tx = coin.SoTransform()
 
         # -- TCP sphere marker --
-        marker = coin.SoSeparator()
         pick = coin.SoPickStyle()
         pick.style.setValue(coin.SoPickStyle.BOUNDING_BOX)
 
@@ -88,8 +92,8 @@ class ViewProviderTool:
         grab = coin.SoSphere()
         grab.radius.setValue(MARKER_GRAB_R_MM)
 
-        for n in (pick, self._marker_mat, sphere, invis, grab):
-            marker.addChild(n)
+        marker = so.sep(pick, self._marker_mat,
+                        sphere, invis, grab)
 
         self._marker_sep = marker  # store for use by pick filter
 
@@ -119,9 +123,9 @@ class ViewProviderTool:
         self.scale_kit.active = 1
 
         # -- add together with pose --
-        axes_sep = coin.SoSeparator()
-        axes_sep.addChild(self.axes_tx)
-        axes_sep.addChild(self.scale_kit)
+        axes_sep = so.group(coin.SoAnnotation(),
+                            self.axes_tx,
+                            self.scale_kit)
 
         root = coin.SoSeparator()
         root.addChild(axes_sep)
@@ -160,58 +164,21 @@ class ViewProviderTool:
 
     def cm_axis_handle(self, i):
         """
-        make the x, y, z triade axes for tcp
+        make the x, y, z drag handle for the tcp: shaft + tip
+        material & pick nodes stay per-axis for pick routing
         """
-        shaft_len = 30.0
-        shaft_rad = 1.0
-        tip_height = 10.0
-        tip_radius = 4.0
-
-        sep = coin.SoSeparator()
-
-        rot = coin.SoRotation()
-        rot.rotation.setValue(
-            coin.SbRotation(
-                coin.SbVec3f(0, 1, 0),
-                coin.SbVec3f(*AXIS_UNITS[i])
-            )
-        )
-
-        mat = coin.SoMaterial()
-        mat.diffuseColor.setValue(*AXIS_COLORS[i])
+        mat = so.material(AXIS_COLORS[i])
         self._axis_mat[i] = mat
 
         pk = coin.SoPickStyle()
         pk.style.setValue(coin.SoPickStyle.BOUNDING_BOX)
 
-        # Shaft
-        shaft_grp = coin.SoSeparator()
-        shaft_tx = coin.SoTranslation()
-        shaft_tx.translation.setValue(0, shaft_len / 2, 0)
+        sep = so.sep(mat,
+                     pk,
+                     so.arrow(AXIS_UNITS[i], TIP_R, TIP_H,
+                              shaft_len=SHAFT_LEN, shaft_r=SHAFT_R))
 
-        shaft = coin.SoCylinder()
-        shaft.radius = shaft_rad
-        shaft.height = shaft_len
-
-        shaft_grp.addChild(shaft_tx)
-        shaft_grp.addChild(shaft)
-
-        # Tip
-        tip_grp = coin.SoSeparator()
-        tip_tx = coin.SoTranslation()
-        tip_tx.translation.setValue(0, shaft_len + tip_height / 2, 0)
-
-        tip = coin.SoCone()
-        tip.bottomRadius = tip_radius
-        tip.height = tip_height
-
-        tip_grp.addChild(tip_tx)
-        tip_grp.addChild(tip)
-
-        for n in (rot, mat, pk, shaft_grp, tip_grp):
-            sep.addChild(n)
-
-        self._axis_sep[i] = sep  # cache for later use
+        self._axis_sep[i] = sep  # pick routing: path.containsNode(sep)
         return sep
 
     def updateData(self, fp, prop):

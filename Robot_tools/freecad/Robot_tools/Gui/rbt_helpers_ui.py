@@ -19,6 +19,7 @@ from PySide.QtWidgets import (  # noqa # type: ignore
     QFileDialog, QMessageBox,  # Dialogs
     QGridLayout, QVBoxLayout, QScrollArea)  # Layouts and Policy
 from PySide.QtCore import QObject, Qt  # type: ignore # noqa
+from PySide.QtGui import QIcon  # type: ignore # noqa
 
 from freecad.Robot_tools.App.rbt_global_constants import ap_clr
 from freecad.Robot_tools import rbt_locator
@@ -259,6 +260,20 @@ def getObjByName(parent, btn_nm):
         return wid
 
 
+def is_alive(fc_obj):
+    """
+    check if the fc doc has not already
+    been closed by the user
+    """
+    if fc_obj is None:
+        return False
+    try:
+        fc_obj.Name
+        return True
+    except ReferenceError:
+        return False
+
+
 def load_panel_ui(filename):
     """
     Helper to load .ui files located at Gui/resources/ui/<filename>.
@@ -266,3 +281,16 @@ def load_panel_ui(filename):
     wb_path = os.path.dirname(rbt_locator.__file__)
     ui_path = os.path.join(wb_path, "resources", "ui", filename)
     return Gui.PySideUic.loadUi(ui_path)
+
+
+JOINT_TYPE_ICONS = {
+    "Fixed":    ":/icons/Assembly_CreateJointFixed.svg",
+    "Revolute": ":/icons/Assembly_CreateJointRevolute.svg",
+    "Slider":   ":/icons/Assembly_CreateJointSlider.svg",
+    "Base":     ":/icons/Assembly_ToggleGrounded.svg",
+}
+
+
+def joint_type_icon(name):
+    return QIcon(JOINT_TYPE_ICONS
+                 .get(name, ":/icons/Assembly_CreateJoint.svg"))

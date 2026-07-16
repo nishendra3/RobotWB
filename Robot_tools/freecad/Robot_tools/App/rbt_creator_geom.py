@@ -9,7 +9,6 @@ from freecad.Robot_tools.App.rbt_kine_types import REVOLUTE
 from freecad.Robot_tools.App.rbt_global_constants import BASE_FRAME_NAME
 
 
-
 def find_center(obj, sub, jtype=REVOLUTE):
     """Find center for the mating or flange faces."""
     # TODO: Find center for revolute joint creation more

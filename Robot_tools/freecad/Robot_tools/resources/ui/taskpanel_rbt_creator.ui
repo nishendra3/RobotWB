@@ -117,7 +117,7 @@
       <item row="1" column="0">
        <widget class="QCheckBox" name="groundedJointCheck">
         <property name="text">
-         <string>Grounded joint</string>
+         <string>Base link</string>
         </property>
         <property name="checked">
          <bool>true</bool>

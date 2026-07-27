@@ -4,6 +4,7 @@ import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
 from PySide import QtCore  # type: ignore
+from PySide.QtCore import QTimer  # type: ignore
 from PySide.QtWidgets import (  # type: ignore
     QWidget, QComboBox, QStackedWidget, QVBoxLayout, QDialogButtonBox,
 )
@@ -15,6 +16,13 @@ from freecad.Robot_tools.App.rbt_helpers_log import fcl_warn
 from freecad.Robot_tools.Gui.rbt_fc_observer import RbtMultiCtrlObserver
 
 
+def robot_key(rb) -> tuple[str, str]:
+    """
+    identitifier that stays unique across documents
+    """
+    return (rb.Document.Name, rb.Name)
+
+
 class MultiRobotControlPanel:
     """
     unified controller for multi-robots
@@ -22,10 +30,16 @@ class MultiRobotControlPanel:
     def __init__(self) -> None:
         self.form = MultiRobotControlWidget()
 
+        # panel refresh timeout
+        self._refresh_timer = QtCore.QTimer(self)
+        self._refresh_timer.setSingleShot(True)
+        self._refresh_timer.setInterval(50)
+        self._refresh_timer.timeout.connect(self.refresh_picker)
+
     def getStandardButtons(self):
         return QDialogButtonBox.Close
 
-    def reject(self) -> None:
+    def reject(self) -> bool:
         """
         commit visible page, detach observer & close
         """
@@ -37,6 +51,7 @@ class MultiRobotControlPanel:
         finally:
             self.form.teardown()
             Gui.Control.closeDialog()
+        return True
 
 
 def run(robot: App.DocumentObject | None = None) -> None:
@@ -75,6 +90,10 @@ class MultiRobotControlWidget(QWidget):
         if self._observer is not None:
             App.removeDocumentObserver(self._observer)
             self._observer = None
+        while self.stack.count():
+            w = self.stack.widget(0)
+            self.stack.removeWidget(w)
+            w.deleteLater()
 
     def closeEvent(self, ev) -> None:
         self.teardown()
@@ -87,25 +106,26 @@ class MultiRobotControlWidget(QWidget):
         """
         set picker to robot
         """
-        i = self.picker.findData(robot)
-        if i >= 0:
-            self.picker.setCurrentIndex(i)
+        for i in range(self.picker.count()):
+            if self.picker.itemData(i) is robot:
+                self.picker.setCurrentIndex(i)
+                return
 
-    def find_page(self, name: str):
+    def find_page(self, key: tuple[str, str]):
         """
         stack == single page registry for the widget
         """
         for i in range(self.stack.count()):
             w = self.stack.widget(i)
-            if w.robot_name == name:
+            if w.page_key == key:
                 return w
         return None
 
-    def drop_page(self, name: str) -> None:
+    def drop_page(self, key: tuple[str, str]) -> None:
         """
         Deletion hook - remove deleted rob's control widget
         """
-        page = self.find_page(name)
+        page = self.find_page(key)
         if page is not None:
             self.stack.removeWidget(page)
             page.deleteLater()
@@ -113,9 +133,9 @@ class MultiRobotControlWidget(QWidget):
 
     def _on_pick(self, _: int) -> None:
         rb = self.current_robot()
-        if rb is None:
+        if rb is None or not is_alive(rb):
             return
-        page = self.find_page(rb.Name)
+        page = self.find_page(robot_key(rb))
         if page is None:
             page = RobotControlWidget(rb)
             self.stack.addWidget(page)
@@ -130,15 +150,39 @@ class MultiRobotControlWidget(QWidget):
         Gui.Selection.addSelection(rb)
 
     def refresh_picker(self) -> None:
-        """
-        refresh the picker panel
-        """
-        prev = self.picker.currentText()
+        prev = self.current_robot()
+        prev_key = (robot_key(prev)
+                    if prev is not None and is_alive(prev)
+                    else None)
+
         self.picker.blockSignals(True)
+
         self.picker.clear()
-        for r in all_robots():
+        robs = all_robots()
+        for r in robs:
             self.picker.addItem(r.Label, r)
+        idx = next((i for i, r in enumerate(robs)
+                    if robot_key(r) == prev_key), 0)
+        if robs:
+            self.picker.setCurrentIndex(idx)
+
         self.picker.blockSignals(False)
-        i = self.picker.findText(prev)
-        self.picker.setCurrentIndex(max(i, 0))
-        self._on_pick(0)
+
+        if not robs:
+            self.stack.setCurrentIndex(-1)
+            return
+        self._on_pick(idx)
+
+    def on_doc_changed(self, obj, prop: str) -> None:
+        if prop == "Robot_assembly":
+            self._refresh_timer.start()
+            return
+        page = self.stack.currentWidget()
+        if page is not None:
+            page.on_doc_changed(obj, prop)
+
+    def on_doc_deleted(self, o) -> None:
+        if not is_robot(o):
+            return
+        key = (o.Document.Name, o.Name)
+        QTimer.singleShot(0, lambda: self.drop_page(key))

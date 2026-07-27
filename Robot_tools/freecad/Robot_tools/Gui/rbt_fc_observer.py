@@ -46,7 +46,7 @@ class RbtObserver:
             return
 
         asm = getattr(d.creator, "assembly", None)
-        if asm is None:
+        if asm is None or not is_alive(asm):
             # nothing built or connected yet
             return
 
@@ -97,18 +97,17 @@ class RbtMultiCtrlObserver:
     def __init__(self, w): self.w = w      # MultiRobotControlWidget
 
     def slotChangedObject(self, obj, prop: str) -> None:
-        page = self.w.stack.currentWidget()
-        if page is None or page._writing:
-            return
-        rb = page.robot
-        if not is_alive(rb):
-            return
-        if prop == "Offset2" and obj in rb.Robot_joints:
-            QTimer.singleShot(0, page.sync_panel_from_doc)
+        try:
+            self.w.on_doc_changed(obj, prop)
+        except RuntimeError:
+            App.removeDocumentObserver(self)
+        except Exception:
+            pass
 
-    def slotCreatedObject(self, o):
-        QTimer.singleShot(0, self.w.refresh_picker)
-
-    def slotDeletedObject(self, o):
-        name = o.Name
-        QTimer.singleShot(0, lambda: self.w.drop_page(name))
+    def slotDeletedObject(self, o) -> None:
+        try:
+            self.w.on_doc_deleted(o)
+        except RuntimeError:
+            App.removeDocumentObserver(self)
+        except Exception:
+            pass

@@ -9,7 +9,7 @@ import UtilsAssembly  # type: ignore
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_err
 
 PLC_TOL = 1e-6
-_SYNC: set[str] = set()  # names of robs currently mid-sync
+_SYNC: set[tuple[str, str]] = set()  # (doc, name) of robs currently mid-sync
 _observer = None
 
 
@@ -143,7 +143,8 @@ def push_base_placement(robot):
     FPO.Base_placement -> asm.Placement
     (from Robot.onChanged)
     """
-    if robot.Name in _SYNC:
+    key = (robot.Document.Name, robot.Name)
+    if key in _SYNC:
         return
     asm, bl = getattr(robot, "Robot_assembly", None), base_link(robot)
     if asm is None or bl is None:
@@ -160,12 +161,12 @@ def push_base_placement(robot):
     if asm.Placement.isSame(tgt, PLC_TOL):
         return
 
-    _SYNC.add(robot.Name)
+    _SYNC.add(key)
 
     try:
         asm.Placement = tgt  # rigid body move
     finally:
-        _SYNC.discard(robot.Name)
+        _SYNC.discard(key)
 
     after_base_move(robot)
 
@@ -175,17 +176,21 @@ def pull_base_placement(robot):
     asm.Placement -> FPO.Base_placement
     (on resotre or edits of Base_offset)
     """
-    if robot.Name in _SYNC:
+    key = (robot.Document.Name, robot.Name)
+    if key in _SYNC:
         return
     bp = get_base_placement(robot)
     if bp is None:
         return
-    if not robot.Base_placement.isSame(bp, PLC_TOL):
-        _SYNC.add(robot.Name)
-        try:
-            robot.Base_placement = bp
-        finally:
-            _SYNC.discard(robot.Name)
+    if robot.Base_placement.isSame(bp, PLC_TOL):
+        return
+
+    _SYNC.add(key)
+
+    try:
+        robot.Base_placement = bp
+    finally:
+        _SYNC.discard(key)
 
     after_base_move(robot)
 

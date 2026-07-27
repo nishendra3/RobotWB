@@ -221,7 +221,7 @@ class RobotControlWidget(QWidget):
         """Canonical Init & set robot obj"""
         super().__init__()
         self.robot = robot_obj
-        self.robot_name = robot_obj.Name
+        self.page_key = (robot_obj.Document.Name, robot_obj.Name)
         self._writing = False  # for observer echo guard
 
         # flags for slider movement
@@ -467,6 +467,8 @@ class RobotControlWidget(QWidget):
             return
         j_idx, raw = pending
         sl = getObjByName(self, f"sl_jnt{j_idx + 1:02d}")
+        if sl is None:
+            return
         new_val = self.ctrl.set_joint_angle_clamped(j_idx, raw / sl._scale)
         self.refresh_row(j_idx, new_val, skip="slider")
         if not sl.isSliderDown():
@@ -574,6 +576,12 @@ class RobotControlWidget(QWidget):
             ck.setChecked(joint_dirs(self.robot)[j_n] == -1)
             ck.toggled.connect(lambda c, idx=j_n: self._on_flip(idx, c))
 
+    def on_doc_changed(self, obj, prop: str) -> None:
+        if self._writing or not is_alive(self.robot):
+            return
+        if prop == "Offset2" and obj in self.robot.Robot_joints:
+            QTimer.singleShot(0, self.sync_panel_from_doc)
+
 
 class AnimationTaskPanel:
     """
@@ -586,9 +594,12 @@ class AnimationTaskPanel:
         return QtGui.QDialogButtonBox.Close
 
     def reject(self) -> bool:
-        with self.form.writing():
-            self.form.ctrl.commit_joints()
-        Gui.Control.closeDialog()
+        try:
+            if is_alive(self.form.robot):
+                with self.form.writing():
+                    self.form.ctrl.commit_joints()
+        finally:
+            Gui.Control.closeDialog()
         return True
 
 

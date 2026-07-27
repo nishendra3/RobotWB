@@ -86,7 +86,7 @@ class RobotCreator:
         Bind creator to asm
         FPO resolved using its Robot_assembly back-link
         """
-        self.asm = asm
+        self.assembly = asm
         robs = all_robots(asm.Document)
         valid_robs = (r for r in robs if r.Robot_assembly is asm)
         self.fpo = next(valid_robs, None)
@@ -95,7 +95,7 @@ class RobotCreator:
         """
         resolve the current assembly from doc
         """
-        asm, fpo, how = resolve_asm_ref(self.asm_docc, hint)
+        asm, fpo, how = resolve_asm_ref(self.asm_doc, hint)
         if asm is None:
             return None
         self.bind(asm)
@@ -107,7 +107,7 @@ class RobotCreator:
         returns parts count or None when no
         assembly is present in current doc
         """
-        if self.resolve() is None:
+        if self.assembly is None and self.resolve() is None:
             return None
 
         return [add_asm_object(o.Document,

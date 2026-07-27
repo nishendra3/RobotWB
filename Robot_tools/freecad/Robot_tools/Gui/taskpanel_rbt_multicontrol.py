@@ -14,6 +14,7 @@ from freecad.Robot_tools.App.rbt_robot import all_robots
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_warn
 from freecad.Robot_tools.Gui.rbt_fc_observer import RbtMultiCtrlObserver
 
+
 class MultiRobotControlPanel:
     """
     unified controller for multi-robots
@@ -28,12 +29,14 @@ class MultiRobotControlPanel:
         """
         commit visible page, detach observer & close
         """
-        page = self.form.stack.currentWidget()
-        if page is not None:
-            with page.writing():
-                page.ctrl.commit_joints()
-        self.form.teardown()
-        Gui.Control.closeDialog()
+        try:
+            page = self.form.stack.currentWidget()
+            if page is not None and is_alive(page.robot):
+                with page.writing():
+                    page.ctrl.commit_joints()
+        finally:
+            self.form.teardown()
+            Gui.Control.closeDialog()
 
 
 def run(robot: App.DocumentObject | None = None) -> None:
@@ -69,7 +72,13 @@ class MultiRobotControlWidget(QWidget):
         App.addDocumentObserver(self._observer)
 
     def teardown(self) -> None:
-        App.removeDocumentObserver(self._observer)
+        if self._observer is not None:
+            App.removeDocumentObserver(self._observer)
+            self._observer = None
+
+    def closeEvent(self, ev) -> None:
+        self.teardown()
+        super().closeEvent(ev)
 
     def current_robot(self):
         return self.picker.currentData()

@@ -804,7 +804,7 @@ class DefineRobot:
         if self.creator.assembly is None:
             # case: no assembly built yet
             return
-        if self.creator.resolve(hint=self.creator.asm) is None:
+        if self.creator.resolve(hint=self.creator.assembly) is None:
             # case: assembly undone by undo or cancel press
             self.reject()
         elif was_joint:

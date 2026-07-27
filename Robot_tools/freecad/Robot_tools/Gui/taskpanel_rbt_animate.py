@@ -475,7 +475,7 @@ class RobotControlWidget(QWidget):
     def _on_commit(self, *_):
         self._sl_timer.stop()
         self._apply_slider()
-        self._sl_commit()
+        self._commit()
 
     def _commit(self):
         # commit the joints on motions

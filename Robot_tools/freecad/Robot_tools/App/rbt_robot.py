@@ -7,6 +7,8 @@ Copyright: 2026
 Licence: LGPL 2.1
 """
 
+import FreeCAD as App  # type: ignore
+
 from freecad.Robot_tools.App.rbt_kine import invalidate
 from freecad.Robot_tools.App.rbt_kine_chain import joint_dirs
 from freecad.Robot_tools.App.rbt_global_constants import DEFAULT_KIN_LIB
@@ -141,3 +143,13 @@ def is_robot(obj) -> bool:
     """
     return (hasattr(obj, "Robot_joints") and
             hasattr(obj, "Robot_assembly"))
+
+
+def all_robots(doc=None):
+    """
+    Returns list of all robots in current doc
+    defaults to current active document
+    """
+    doc = doc or App.ActiveDocument
+    return [o for o in doc.Objects
+            if is_robot(o)] if doc else []

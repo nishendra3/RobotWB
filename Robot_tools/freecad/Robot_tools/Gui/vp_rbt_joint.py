@@ -3,6 +3,9 @@ vp_rbt_joint.py
 File for handing display icons for joints
 """
 
+import FreeCAD as App  # type: ignore
+import UtilsAssembly  # type: ignore
+
 from pivy import coin  # type: ignore
 from JointObject import ViewProviderJoint  # type: ignore
 from freecad.Robot_tools.App.rbt_placement import is_base_joint, joint_dir
@@ -40,8 +43,23 @@ class ViewProviderBaseJoint(ViewProviderJoint):
         self.marker.set_kind(str(j.JointType),
                              is_base_joint(j, j.Proxy.getAssembly(j)),
                              joint_dir(j))
-        self.setJCSPosition(self.marker, plc, ref)
+        # self.setJCSPosition(self.marker, plc, ref)
+        self.place_marker(plc, ref)
         self.marker.whichChild = coin.SO_SWITCH_ALL
+
+    def place_marker(self, plc, ref):
+        """
+        setJCSPoistion function from FC
+        """
+        asm = self.app_obj.Proxy.getAssembly(self.app_obj)
+        if asm and ref and plc:
+            asm_global = asm.getGlobalPlacement()
+            if asm_global != App.Placement():
+                plc = asm_global.inverse()*(
+                    UtilsAssembly.getGlobalPlacement(ref)*plc
+                )
+                ref = None
+        self.marker.set_marker_placement(plc, ref)
 
     def setPickableState(self, state):
         super().setPickableState(state)

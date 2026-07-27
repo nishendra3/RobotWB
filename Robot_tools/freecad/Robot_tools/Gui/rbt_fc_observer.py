@@ -15,6 +15,7 @@ __build__ = "20260507_1255"
 import FreeCAD as App  # type: ignore
 from PySide.QtCore import QTimer  # type: ignore
 
+from freecad.Robot_tools.Gui.rbt_helpers_ui import is_alive
 
 """
 ----------------------------------------
@@ -43,6 +44,16 @@ class RbtObserver:
             return
         if obj.Document is not d.assembly_doc:
             return
+
+        asm = getattr(d.creator, "assembly", None)
+        if asm is None:
+            # nothing built or connected yet
+            return
+
+        if obj is not asm and obj not in asm.OutListRecursive:
+            # deletion belongs to another robot
+            return
+
         is_joint = hasattr(obj, "ObjectToGround") or hasattr(obj, "JointType")
         link_nm = obj.Name if obj.isDerivedFrom("App::Link") else None
         QTimer.singleShot(0, lambda: d.on_obj_deleted(is_joint, link_nm))
@@ -77,3 +88,27 @@ class RbtSelectionObserver:
 
     def removeSelection(self, *a):
         self.on_changed(*a)
+
+
+class RbtMultiCtrlObserver:
+    """
+    Mirror external joint/base changes into the panel
+    """
+    def __init__(self, w): self.w = w      # MultiRobotControlWidget
+
+    def slotChangedObject(self, obj, prop: str) -> None:
+        page = self.w.stack.currentWidget()
+        if page is None or page._writing:
+            return
+        rb = page.robot
+        if not is_alive(rb):
+            return
+        if prop == "Offset2" and obj in rb.Robot_joints:
+            QTimer.singleShot(0, page.sync_panel_from_doc)
+
+    def slotCreatedObject(self, o):
+        QTimer.singleShot(0, self.w.refresh_picker)
+
+    def slotDeletedObject(self, o):
+        name = o.Name
+        QTimer.singleShot(0, lambda: self.w.drop_page(name))

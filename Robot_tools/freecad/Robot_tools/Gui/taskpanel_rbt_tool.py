@@ -3,8 +3,9 @@
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 from PySide import QtGui  # type: ignore
+from PySide.QtWidgets import QInputDialog  # type: ignore
 
-from freecad.Robot_tools.App.rbt_robot import is_robot
+from freecad.Robot_tools.App.rbt_robot import is_robot, all_robots
 from freecad.Robot_tools.App.rbt_tool import (
     Tool, import_shape, has_valid_shape)
 from freecad.Robot_tools.App.rbt_creator_geom import find_center
@@ -314,18 +315,23 @@ def run():
 
 
 def find_rob():
-    sel = Gui.Selection.getSelection()
-    robot = next((o for o in sel if is_robot(o)), None)
-    if robot is not None:
-        return robot
+    """
+    Target robot: selection > sole robot > ask user
+    """
+    # return the first user selected robot
+    sel = [o for o in Gui.Selection.getSelection() if is_robot(o)]
+    if len(sel) == 1:
+        return sel[0]
 
-    fcl_warn("no rob-fpo pre-selected, choosing first rob from curr file")
-    # TODO: better define this selection behaviour
-    # select the first rob from active document
-    doc = App.ActiveDocument
-    if doc is None:
+    # only one robot exists in doc
+    robs = all_robots()
+    if len(robs) == 1:
+        return robs[0]
+    if not robs:
         return None
-    robs = [o for o in doc.Objects if is_robot(o)]
-    if len(robs) < 1:
-        return None
-    return robs[0]
+
+    # ask user for disambiguation
+    names = [f"{r.Label} ({r.Name})" for r in robs]
+    pick, ok = QInputDialog.getItem(None, "Select Robot",
+                                          "Robot:", names, 0, False)
+    return robs[names.index(pick)] if ok else None

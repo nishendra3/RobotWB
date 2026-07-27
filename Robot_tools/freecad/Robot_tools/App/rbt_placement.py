@@ -9,7 +9,7 @@ import UtilsAssembly  # type: ignore
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_err
 
 PLC_TOL = 1e-6
-_SYNC = False  # guard flag to prevent recursion
+_SYNC: set[str] = set()  # names of robs currently mid-sync
 _observer = None
 
 
@@ -143,8 +143,7 @@ def push_base_placement(robot):
     FPO.Base_placement -> asm.Placement
     (from Robot.onChanged)
     """
-    global _SYNC
-    if _SYNC:
+    if robot.Name in _SYNC:
         return
     asm, bl = getattr(robot, "Robot_assembly", None), base_link(robot)
     if asm is None or bl is None:
@@ -161,12 +160,12 @@ def push_base_placement(robot):
     if asm.Placement.isSame(tgt, PLC_TOL):
         return
 
-    _SYNC = True
+    _SYNC.add(robot.Name)
 
     try:
         asm.Placement = tgt  # rigid body move
     finally:
-        _SYNC = False
+        _SYNC.discard(robot.Name)
 
     after_base_move(robot)
 
@@ -176,18 +175,17 @@ def pull_base_placement(robot):
     asm.Placement -> FPO.Base_placement
     (on resotre or edits of Base_offset)
     """
-    global _SYNC
-    if _SYNC:
+    if robot.Name in _SYNC:
         return
     bp = get_base_placement(robot)
     if bp is None:
         return
     if not robot.Base_placement.isSame(bp, PLC_TOL):
-        _SYNC = True
+        _SYNC.add(robot.Name)
         try:
             robot.Base_placement = bp
         finally:
-            _SYNC = False
+            _SYNC.discard(robot.Name)
 
     after_base_move(robot)
 

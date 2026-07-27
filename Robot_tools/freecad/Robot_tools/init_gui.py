@@ -13,13 +13,14 @@ import FreeCAD as App  # type: ignore
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_msg
 
 tb_pstr = "User parameter:BaseApp/Workbench/Global/Toolbar"
-tb_vers = 1.08
+tb_vers = 1.09
 tb_name = "Robot Tools Toolbar"
 pg_name = "Robot_tools"
 
 tb_cmds = [("RBT_defrob", "RBT"),
            ("RBT_anrob", "RBT"),
-           ("RBT_deftool", "RBT")]
+           ("RBT_deftool", "RBT"),
+           ("RBT_multictrl", "RBT")]
 
 gtb_grp = App.ParamGet(tb_pstr)
 

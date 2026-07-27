@@ -3,11 +3,12 @@ Assembly document handling for creation of new robot
 Builds the Robot_Assembly & links part instances to it
 """
 
-import UtilsAssembly   # type: ignore
+import FreeCAD as App  # type: ignore
 
 from freecad.Robot_tools.App.rbt_global_constants import (
     ROBOT_ASSEMBLY_LABEL, ROBOT_FPO_NAME
 )
+from freecad.Robot_tools.App.rbt_robot import is_robot, all_robots
 
 
 def create_assembly(doc):
@@ -36,38 +37,38 @@ def add_asm_object(obj_doc, asm, feat_nm, link_nm, glbl):
     return item
 
 
-def resolve_asm_ref(asm_doc):
-    """Resolve the robot assembly for the given document."""
+def resolve_asm_ref(asm_doc: App.Document,
+                    hint: App.DocumentObject | None = None):
+    """
+    Resolve (asm, fpo, how)
+    hint: robot/assembly chosen by the Gui caller.
+    how: "from_hint" | "only_robot" | "label_scan" | "unresolved"
+    """
 
-    fpos = asm_doc.getObjectsByLabel(ROBOT_FPO_NAME)
-    fpo = fpos[0] if len(fpos) == 1 else None
+    robots = all_robots(asm_doc)
 
-    # try preferred sources
-    candidates = [
-        ("fpo", getattr(fpo, "Robot_assembly", None)),
-        ("active", UtilsAssembly.activeAssembly()),
-    ]
+    if (hint is not None and
+            hint.Document is asm_doc):
+        if is_robot(hint):
+            return hint.Robot_assembly, hint, "from_hint"
 
-    # first valid match wins
-    for source, asm in candidates:
-        if asm and asm.Document is asm_doc:
-            return asm, fpo, source
+        fpo = next((r for r in robots if r.Robot_assembly is hint), None)
+        return hint, fpo, "from_hint"
 
-    # fallback: search by label
-    objs = find_assemblies(asm_doc)
+    if len(robots) == 1:
+        return robots[0].Robot_assembly, robots[0], "only_robot"
 
-    # unique match only
-    if len(objs) == 1:
-        return objs[0], fpo, "label"
+    objs = find_assemblies(asm_doc)  # FPO-less in-progress asm
+    if not robots and len(objs) == 1:
+        return objs[0], None, "label_scan"
 
-    # nothing found
-    return None, fpo, "none"
+    return None, None, "unresolved"
 
 
 def find_assemblies(doc):
     """
     All Robot_Assembly objects in doc
     """
-    return [obj for obj in
-            doc.getObjectsByLabel(ROBOT_ASSEMBLY_LABEL)
-            if obj.isDerivedFrom("Assembly::AssemblyObject")]
+    return [o for o in doc.Objects
+            if o.isDerivedFrom("Assembly::AssemblyObject")
+            and o.Label.startswith(ROBOT_ASSEMBLY_LABEL)]

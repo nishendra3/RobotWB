@@ -6,7 +6,7 @@ import FreeCAD as App  # type: ignore
 import UtilsAssembly   # type: ignore
 
 
-from freecad.Robot_tools.App.rbt_robot import Robot
+from freecad.Robot_tools.App.rbt_robot import Robot, all_robots
 from freecad.Robot_tools.App.rbt_creator_geom import add_base_frame
 from freecad.Robot_tools.App.rbt_creator_asm import (
     create_assembly, add_asm_object, resolve_asm_ref,
@@ -83,22 +83,19 @@ class RobotCreator:
 
     def bind(self, asm):
         """
-        Sets 'asm' as the curr working assembly
-        and fixes FPO to Assembly link
+        Bind creator to asm
+        FPO resolved using its Robot_assembly back-link
         """
-        self.assembly = asm
-        fpos = asm.Document.getObjectsByLabel('Robot_FPO')
-        if len(fpos) == 1:
-            self.fpo = fpos[0]
-            ra = getattr(self.fpo, 'Robot_assembly', None)
-            if ra is not asm:
-                self.fpo.Robot_assembly = asm
+        self.asm = asm
+        robs = all_robots(asm.Document)
+        valid_robs = (r for r in robs if r.Robot_assembly is asm)
+        self.fpo = next(valid_robs, None)
 
-    def resolve(self):
+    def resolve(self, hint=None):
         """
         resolve the current assembly from doc
         """
-        asm, fpo, how = resolve_asm_ref(self.asm_doc)
+        asm, fpo, how = resolve_asm_ref(self.asm_docc, hint)
         if asm is None:
             return None
         self.bind(asm)

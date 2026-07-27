@@ -2,14 +2,16 @@
 
 import FreeCAD as App   # type: ignore
 import FreeCADGui as Gui  # type: ignore
+import UtilsAssembly  # type: ignore
 
 from enum import IntEnum
 
 from PySide.QtCore import Qt  # type: ignore
 from PySide.QtWidgets import (  # type: ignore
     QInputDialog, QTableWidgetItem, QPushButton,
-    QTreeWidgetItem, QHeaderView)
+    QTreeWidgetItem, QHeaderView, QMessageBox)
 
+from freecad.Robot_tools.App.rbt_robot import is_robot
 from freecad.Robot_tools.App.rbt_creator import RobotCreator
 from freecad.Robot_tools.App.rbt_creator_asm import find_assemblies
 
@@ -75,6 +77,16 @@ def _is_container(obj):
 def _is_insertable(obj):
     return (_is_shown(obj) and not
             obj.isDerivedFrom("App::DocumentObjectGroup"))
+
+
+def gui_asm_hint() -> App.DocumentObject | None:
+    """
+    Prio order: Selection > Active Assembly
+    """
+    usr_sel = Gui.Selection.getSelection()
+    sel = next((o for o in usr_sel if is_robot(o)), None)
+
+    return sel or UtilsAssembly.activeAssembly()
 # --------------------------------------------------------------
 
 
@@ -84,7 +96,12 @@ class DefineRobot:
     """
     def __init__(self):
         self.creator = RobotCreator()
-        self.doc, self.doc_owner = self.pick_working_doc()
+
+        # check if a robot is pre-selected
+        self.sel_rob = next((o for o in Gui.Selection.getSelection()
+                             if is_robot(o)), None)
+
+        self.doc, self.doc_owner = self.pick_working_doc(self.sel_rob)
         self.imported_names = set()
         self.doc.openTransaction("Create Robot")
         try:
@@ -102,14 +119,15 @@ class DefineRobot:
             self.install_observer()
             self.curr_step = CreationStep.IMPORT_PARTS
 
-            if find_assemblies(self.creator.asm_doc):
-                # case: reopened existing robot file
+            if self.sel_rob is not None:
+                # case: edit mode
+                # bind the selected robot and resume its steps
                 self.check_asm()
                 self.joint_index = self.creator.next_joint_index()
                 self.curr_step = (CreationStep.ADD_JOINTS
                                   if self.creator.part_count()
                                   else CreationStep.CREATE_ASSEMBLY)
-
+            # else: new-robot mode
             self.set_curr_step(self.curr_step)
         except Exception:
             self.doc.abortTransaction()
@@ -120,26 +138,44 @@ class DefineRobot:
     def assembly_doc(self):
         return self.creator.asm_doc
 
-    def pick_working_doc(self):
+    def pick_working_doc(self, sel_rob=None):
         """
-        fresh builds go into a new doc & we
-        reuse the doc when robot fpo pre-exists
-        or the doc is empty (no Objects present)
+        Edit Mode: Selected rob's doc
+        New Creation: Ask user if non-empty doc
+        else create in the fresh doc
         """
-        doc = App.ActiveDocument
-
-        # reuse case : resuming rbt file of empty doc
-        if doc is not None:
+        if sel_rob is not None:
+            doc = sel_rob.Document
             self.creator.asm_doc = doc
-            # check if the doc contains is rbt or empty
-            if (find_assemblies(self.creator.asm_doc)
-                    or not doc.Objects):
-                return doc, False
+            return doc, False
 
-        # fresh build case
+        doc = App.ActiveDocument
+        is_valid_doc = doc is not None
+        use_current_doc = is_valid_doc and (not doc.Objects
+                                            or self.ask_doc_usage(doc))
+        if (use_current_doc):
+            self.creator.asm_doc = doc
+            return doc, False
+
+        # create a new doc
         doc = App.newDocument("Robot")
         self.creator.asm_doc = doc
         return doc, True
+
+    def ask_doc_usage(self, doc) -> bool:
+        """
+        Ask user for clarification if active doc
+        is non-empty before adding new items
+        """
+        choice = QMessageBox.question(
+            Gui.getMainWindow(),
+            "Define Robot",
+            "Add the new robot to current document?\n"
+            "(Yes: Add to current | No: Add to new document)",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes)
+
+        return choice == QMessageBox.Yes
 
     def cm_form(self):
         w = load_panel_ui("taskpanel_rbt_creator.ui")
@@ -265,16 +301,13 @@ class DefineRobot:
         """
         Resolve assembly in creator.asm_doc and sync UI
         """
-        how = self.creator.resolve()
+        how = self.creator.resolve(hint=gui_asm_hint())
         if how is None:
             return self.disambiguate_asm()
         if self.creator.fpo is None:
             msg_box(self.form, " ", self.form.font(),
                     "No Robot_FPO in document.")
             return
-        if how != "fpo":
-            # TODO: Clear this part's usage
-            fcl_warn(f"Assm resolved via '{how}, FPO relinked")
 
         self.refresh_status()
         self.refresh_joints_table()
@@ -771,7 +804,7 @@ class DefineRobot:
         if self.creator.assembly is None:
             # case: no assembly built yet
             return
-        if self.creator.resolve() is None:
+        if self.creator.resolve(hint=self.creator.asm) is None:
             # case: assembly undone by undo or cancel press
             self.reject()
         elif was_joint:

@@ -10,10 +10,13 @@ Licence: LGPL 2.1
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
+from contextlib import contextmanager
+
 # Layouts and Policy
 from PySide import QtGui, QtCore  # type: ignore
+from PySide.QtCore import QTimer  # type: ignore
 from PySide.QtWidgets import (  # type: ignore
-    QApplication,  QFrame, QGroupBox, QLabel,
+    QWidget, QApplication,  QFrame, QGroupBox, QLabel,
     QHBoxLayout,  QGridLayout,  QSizePolicy)
 
 from freecad.Robot_tools.Gui.rbt_helpers_ui import (
@@ -23,7 +26,8 @@ from freecad.Robot_tools.Gui.rbt_helpers_ui import (
     cm_scroll,
     cm_tool_btn,
     getObjByName,
-    msg_box
+    msg_box,
+    is_alive
 )
 
 from freecad.Robot_tools.App.rbt_robot import is_robot
@@ -199,8 +203,10 @@ class AnimationController:
 # ---------------------------------------------
 
 
-class AnimationTaskPanel:
-    """Task panel for Robot Animator."""
+class RobotControlWidget(QWidget):
+    """
+    Widget for Robot Control
+    """
     #
     grb_ss = (
         ""
@@ -213,8 +219,26 @@ class AnimationTaskPanel:
 
     def __init__(self, robot_obj):
         """Canonical Init & set robot obj"""
+        super().__init__()
         self.robot = robot_obj
+        self.robot_name = robot_obj.Name
+        self._writing = False  # for observer echo guard
+
+        # flags for slider movement
+        self._sl_pending = None
+        self._sl_timer = QTimer(self)
+        self._sl_timer.setSingleShot(True)
+        self._sl_timer.timeout.connect(self._apply_slider)
+
         self.initUI()
+
+    @contextmanager
+    def writing(self):
+        self._writing = True
+        try:
+            yield
+        finally:
+            self._writing = False
 
     def initUI(self):
         """Init UI."""
@@ -222,53 +246,47 @@ class AnimationTaskPanel:
 
         fnt = QApplication.font("QMessageBox")
         self.fnt = fnt
-        self.form = QtGui.QWidget()
-        self.form.setWindowTitle("Robot Animator")
-        self.form.setObjectName("RobotAnimationPanel")
 
-        self.form_lay = QGridLayout(self.form)
+        self.setWindowTitle("Robot Animator")
+        self.setObjectName("RobotAnimationPanel")
+
+        self.form_lay = QGridLayout(self)
 
         obj = self.robot
         row = 0
-        lbl_rob_id = cm_lbl(self.form, "lbl_rob_id", f"<b>{obj.Name}</b>",
+        lbl_rob_id = cm_lbl(self, "lbl_rob_id", f"<b>{obj.Name}</b>",
                             self.fnt, 0)
         self.form_lay.addWidget(lbl_rob_id, row, 0, 1, 4)
         row += 1
         self.ctrl = AnimationController(obj)
         tp_gb0 = self.create_joint_ui()
         # wrap in a scrollable area
-        scroll = cm_scroll(self.form, "tp_gb0_scroll", tp_gb0)
+        scroll = cm_scroll(self, "tp_gb0_scroll", tp_gb0)
         self.form_lay.addWidget(scroll, row, 0, 1, 4)
+
         # self.form_lay.addWidget(tp_gb0, row, 0, 1, 4)
         self.read_joints_data()
-        self.switch_document(obj.Document.Name)
         self.ctrl.set_initial_pose()
         self.sync_panel_from_doc()
 
-    def switch_document(self, doc_name):
-        """Switch a FreeCAD document."""
-        App.setActiveDocument(doc_name)
-        App.ActiveDocument = App.getDocument(doc_name)
-        Gui.ActiveDocument = Gui.getDocument(doc_name)
-
     def create_joint_ui(self):
         """Create Joint UI."""
-        tp_gb0, tp_gb0l = cm_gbx(self.form, "tp_gb0", "Joint Axes Jog")
+        tp_gb0, tp_gb0l = cm_gbx(self, "tp_gb0", "Joint Axes Jog")
         tp_gb0.setStyleSheet(self.grb_ss)
 
         # -- Header Row --
-        lbl_h0 = cm_lbl(self.form, "lbl_h0", "<b>Axis</b>", self.fnt, 1)
+        lbl_h0 = cm_lbl(self, "lbl_h0", "<b>Axis</b>", self.fnt, 1)
         tp_gb0l.addWidget(lbl_h0, 0, 0, 1, 1)
 
-        lbl_h1 = cm_lbl(self.form, "lbl_h1", "<b>Value</b>", self.fnt,
+        lbl_h1 = cm_lbl(self, "lbl_h1", "<b>Value</b>", self.fnt,
                         1, l_aln=1)
         tp_gb0l.addWidget(lbl_h1, 0, 1, 1, 1)
 
-        lbl_h2 = cm_lbl(self.form, "lbl_h2", "<b>Position</b>", self.fnt,
+        lbl_h2 = cm_lbl(self, "lbl_h2", "<b>Position</b>", self.fnt,
                         1, l_aln=1)
         tp_gb0l.addWidget(lbl_h2, 0, 2, 1, 5)
 
-        lbl_h3 = cm_lbl(self.form, "lbl_h3", "<b>Flip</b>", self.fnt,
+        lbl_h3 = cm_lbl(self, "lbl_h3", "<b>Flip</b>", self.fnt,
                         1, l_aln=1)
         tp_gb0l.addWidget(lbl_h3, 0, 7, 1, 1)
 
@@ -277,7 +295,7 @@ class AnimationTaskPanel:
         for idx, jnm in enumerate(self.ctrl.j_nms):
             low, hi = joint_limits_q_deg(self.robot, idx)
             jtype = joint_type_FC2WB(self.robot.Robot_joints[idx].JointType)
-            create_link_row(self.form, tp_gb0l, brow, self.fnt,
+            create_link_row(self, tp_gb0l, brow, self.fnt,
                             idx + 1, low, hi, jtype)
             brow += 1
 
@@ -288,11 +306,11 @@ class AnimationTaskPanel:
         tb_lay = QHBoxLayout()
         tb_lay.setContentsMargins(0, 0, 0, 0)
 
-        lbl_step = cm_lbl(self.form, "lbl_step", "<b>Step</b>", self.fnt, 1)
+        lbl_step = cm_lbl(self, "lbl_step", "<b>Step</b>", self.fnt, 1)
         tb_lay.addWidget(lbl_step)
 
         # entry box to set step size
-        dspb_step = cm_dspb(self.form, "dspb_step", self.fnt,
+        dspb_step = cm_dspb(self, "dspb_step", self.fnt,
                             sb_min=0.01, sb_max=90.0,
                             sb_dec=2, sb_step=0.1, sb_suf="")
         dspb_step.setToolTip("jog step in joint units (° | mm)")
@@ -304,11 +322,11 @@ class AnimationTaskPanel:
         tb_lay.addStretch(1)
 
         # home pos buttons
-        btn_home_go = cm_btn(self.form, "btn_home_go",
+        btn_home_go = cm_btn(self, "btn_home_go",
                              "Go Home",  self.fnt)
-        btn_home_set = cm_btn(self.form, "btn_home_set",
+        btn_home_set = cm_btn(self, "btn_home_set",
                               "Set Home", self.fnt)
-        btn_zero_set = cm_btn(self.form, "btn_zero_set", "Set Zero",
+        btn_zero_set = cm_btn(self, "btn_zero_set", "Set Zero",
                               self.fnt)
         btn_zero_set.setToolTip(
             "Make the current pose the robot's zero pose: all joints\n"
@@ -324,9 +342,9 @@ class AnimationTaskPanel:
         tb_lay.addSpacing(12)
 
         # reset and reload FPO buttons
-        btn_jnts_res = cm_btn(self.form, "btn_jnts_res", "Reset",
+        btn_jnts_res = cm_btn(self, "btn_jnts_res", "Reset",
                               self.fnt)
-        btn_jnts_rld = cm_btn(self.form, "btn_jnts_rld", "Reload FPO",
+        btn_jnts_rld = cm_btn(self, "btn_jnts_rld", "Reload FPO",
                               self.fnt)
         btn_jnts_rld.setToolTip("Reload FPO data ('joints directions')")
         tb_lay.addWidget(btn_jnts_res)
@@ -355,13 +373,13 @@ class AnimationTaskPanel:
         """reloads the row based on current state"""
         nm = f"{j_idx + 1:02d}"
         if skip != "dspb":
-            sb = getObjByName(self.form, f"dspb_jnt{nm}")
+            sb = getObjByName(self, f"dspb_jnt{nm}")
             if sb is not None:
                 sb.blockSignals(True)
                 sb.setValue(value)
                 sb.blockSignals(False)
         if skip != "slider":
-            sl = getObjByName(self.form, f"sl_jnt{nm}")
+            sl = getObjByName(self, f"sl_jnt{nm}")
             if sl is not None:
                 sl.blockSignals(True)
                 sl.setValue(int(value * sl._scale))
@@ -375,7 +393,7 @@ class AnimationTaskPanel:
         val = self.ctrl.j_vals[j_idx]
         nm = f"{j_idx + 1:02d}"
         # spinbox
-        sb = getObjByName(self.form, f"dspb_jnt{nm}")
+        sb = getObjByName(self, f"dspb_jnt{nm}")
         if sb is not None:
             sb.blockSignals(True)
             sb.setRange(low, hi)
@@ -383,7 +401,7 @@ class AnimationTaskPanel:
             sb.blockSignals(False)
 
         # slider
-        sl = getObjByName(self.form, f"sl_jnt{nm}")
+        sl = getObjByName(self, f"sl_jnt{nm}")
         if sl is not None:
             sl.blockSignals(True)
             sl.setRange(int(low * sl._scale), int(hi * sl._scale))
@@ -393,10 +411,10 @@ class AnimationTaskPanel:
         # increment/decremnt buttons
         jt = joint_type_FC2WB(self.robot.Robot_joints[j_idx].JointType)
         unit = " mm" if jt == PRISMATIC else "°"
-        bm = getObjByName(self.form, f"btn_jnt_m{nm}")
+        bm = getObjByName(self, f"btn_jnt_m{nm}")
         if bm is not None:
             bm.setToolTip(f"min: {low:g}{unit}")
-        bp = getObjByName(self.form, f"btn_jnt_p{nm}")
+        bp = getObjByName(self, f"btn_jnt_p{nm}")
         if bp is not None:
             bp.setToolTip(f"max: {hi:g}{unit}")
 
@@ -413,18 +431,19 @@ class AnimationTaskPanel:
     def _on_step(self, j_idx, sign):
         new_val = self.ctrl.step_joint(j_idx, sign)
         self.refresh_row(j_idx, new_val)
-        self.ctrl.commit_joints()
+        self._commit()
 
     def _on_reset_joints(self):
-        self.ctrl.reset_joints()
+        with self.writing():
+            self.ctrl.reset_joints()
         for j_n in range(self.ctrl.j_num):
             self.refresh_row(j_n, 0.0)
 
     def _on_reload_dirs(self):
-        self.ctrl.commit_joints()
+        self._commit()
         dirs = joint_dirs(self.robot)
         for j_n in range(self.ctrl.j_num):
-            ck = getObjByName(self.form, f"chk_flip{j_n+1:02d}")
+            ck = getObjByName(self, f"chk_flip{j_n+1:02d}")
             if ck is not None:
                 ck.blockSignals(True)
                 ck.setChecked(dirs[j_n] == -1)
@@ -439,14 +458,33 @@ class AnimationTaskPanel:
         self.refresh_row(j_idx, new_val, skip="dspb")
 
     def _on_slider(self, j_idx, raw):
-        sl = getObjByName(self.form, f"sl_jnt{j_idx + 1:02d}")
+        self._sl_pending = (j_idx, raw)
+        self._sl_timer.start(0)
+
+    def _apply_slider(self):
+        pending, self._sl_pending = self._sl_pending, None
+        if pending is None or not is_alive(self.robot):
+            return
+        j_idx, raw = pending
+        sl = getObjByName(self, f"sl_jnt{j_idx + 1:02d}")
         new_val = self.ctrl.set_joint_angle_clamped(j_idx, raw / sl._scale)
         self.refresh_row(j_idx, new_val, skip="slider")
         if not sl.isSliderDown():
+            self._commit()
+
+    def _on_commit(self, *_):
+        self._sl_timer.stop()
+        self._apply_slider()
+        self._sl_commit()
+
+    def _commit(self):
+        # commit the joints on motions
+        with self.writing():
             self.ctrl.commit_joints()
 
     def _on_flip(self, j_idx, checked):
-        self.ctrl.commit_joints()
+        with self.writing():
+            self.ctrl.commit_joints()
         dirs = joint_dirs(self.robot)
         dirs[j_idx] = -1 if checked else 1
 
@@ -460,23 +498,22 @@ class AnimationTaskPanel:
         self.ctrl.j_step = float(value)
 
     def _on_set_home(self):
-        self.ctrl.commit_joints()
+        with self.writing():
+            self.ctrl.commit_joints()
         save_home(self.robot)
 
     def _on_set_zero(self):
-        self.ctrl.commit_joints()         # pose -> Offset2 first
+        self._commit()         # pose -> Offset2 first
         set_zero_pose(self.robot)         # snapshot raw as zero pose
         self.ctrl.sync_joints_from_doc()  # j_vals re-read -> ~0.0
         for j_n in range(self.ctrl.j_num):
             self.refresh_row_limits(j_n)  # re-center sliders/spinboxes
 
     def _on_go_home(self):
-        self.ctrl.go_home_pos()
+        with self.writing():
+            self.ctrl.go_home_pos()
         for idx in range(self.ctrl.j_num):
             self.refresh_row(idx, self.ctrl.j_vals[idx])
-
-    def _on_commit(self, *_):
-        self.ctrl.commit_joints()
 
     # --------------------------------------------
     #           Robot state interface
@@ -484,7 +521,7 @@ class AnimationTaskPanel:
     def read_joints_data(self, dbg_s=False):
         """Read joint data."""
         # dbg_s = True  # DBG
-        p_wid = self.form.findChild(QGroupBox, "tp_gb0_wd")
+        p_wid = self.findChild(QGroupBox, "tp_gb0_wd")
         if p_wid is None:
             return
         else:
@@ -537,19 +574,29 @@ class AnimationTaskPanel:
             ck.setChecked(joint_dirs(self.robot)[j_n] == -1)
             ck.toggled.connect(lambda c, idx=j_n: self._on_flip(idx, c))
 
-    # --------------------------------------------
-    #      Standard Taskpanel functions
-    # --------------------------------------------
+
+class AnimationTaskPanel:
+    """
+    Single-robot control shell around RobotControlWidget
+    """
+    def __init__(self, robot_obj) -> None:
+        self.form = RobotControlWidget(robot_obj)
+
     def getStandardButtons(self):
-        """Draw a single X close btn"""
         return QtGui.QDialogButtonBox.Close
 
-    def reject(self):
-        """Runs when user closes taskpanel"""
-        self.ctrl.commit_joints()
+    def reject(self) -> bool:
+        with self.form.writing():
+            self.form.ctrl.commit_joints()
         Gui.Control.closeDialog()
         return True
-    # --------------------------------------------
+
+
+def switch_document(doc_name):
+    """Switch a FreeCAD document."""
+    App.setActiveDocument(doc_name)
+    App.ActiveDocument = App.getDocument(doc_name)
+    Gui.ActiveDocument = Gui.getDocument(doc_name)
 
 
 def run(robot=None):
@@ -582,4 +629,5 @@ def run(robot=None):
         # skip if other dialogs are open
         return
 
+    switch_document(robot.Document.Name)
     Gui.Control.showDialog(AnimationTaskPanel(robot))

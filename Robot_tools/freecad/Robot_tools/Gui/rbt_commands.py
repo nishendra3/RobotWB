@@ -79,10 +79,29 @@ class CommandCreateTool:
         taskpanel_rbt_tool.run()
 
 
+class CommandMultiControl:
+    """
+    opens the multi-robot control panel
+    """
+    def GetResources(self):
+        return {"Pixmap": os.path.join(wb_path,
+                                       'resources/icons/rbt_animateRobot.svg'),
+                "MenuText": "Multi-Robot Control",
+                "ToolTip": "Control all robots in the document from one panel"}
+
+    def IsActive(self) -> bool:
+        return bool(App.ActiveDocument) and not Gui.Control.activeDialog()
+
+    def Activated(self) -> None:
+        from . import taskpanel_rbt_multicontrol
+        taskpanel_rbt_multicontrol.run()
+
+
 commands = {
     "RBT_anrob": CommandAnimateRobot(),
     "RBT_defrob": CommandCreateRobot(),
     "RBT_deftool": CommandCreateTool(),
+    "RBT_multictrl": CommandMultiControl(),
 }
 
 COMMAND_NAMES = list(commands.keys())

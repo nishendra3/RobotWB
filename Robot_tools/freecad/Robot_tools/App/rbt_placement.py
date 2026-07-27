@@ -66,7 +66,7 @@ def joint_dir(joint):
     +1/-1 jog direction from the parent robot obj
     default: +1
     """
-    for fpo in joint.Document.findObjects("App::FeaturePython"):
+    for fpo in joint.InList:
         js = getattr(fpo, "Robot_joints", None)
         if js and joint in js:
             dirs = getattr(fpo, "Robot_joints_dir", ())

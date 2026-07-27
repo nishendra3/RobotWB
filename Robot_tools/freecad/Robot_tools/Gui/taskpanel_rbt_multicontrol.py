@@ -30,12 +30,6 @@ class MultiRobotControlPanel:
     def __init__(self) -> None:
         self.form = MultiRobotControlWidget()
 
-        # panel refresh timeout
-        self._refresh_timer = QtCore.QTimer(self)
-        self._refresh_timer.setSingleShot(True)
-        self._refresh_timer.setInterval(50)
-        self._refresh_timer.timeout.connect(self.refresh_picker)
-
     def getStandardButtons(self):
         return QDialogButtonBox.Close
 
@@ -79,6 +73,12 @@ class MultiRobotControlWidget(QWidget):
         lay = QVBoxLayout(self)
         lay.addWidget(self.picker)
         lay.addWidget(self.stack)
+
+        # panel refresh timeout
+        self._refresh_timer = QtCore.QTimer(self)
+        self._refresh_timer.setSingleShot(True)
+        self._refresh_timer.setInterval(50)
+        self._refresh_timer.timeout.connect(self.refresh_picker)
 
         self.picker.currentIndexChanged.connect(self._on_pick)
         self.refresh_picker()

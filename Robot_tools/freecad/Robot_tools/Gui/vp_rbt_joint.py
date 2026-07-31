@@ -40,16 +40,19 @@ class ViewProviderBaseJoint(ViewProviderJoint):
             self.marker.whichChild = coin.SO_SWITCH_NONE
             return
         j = self.app_obj
-        self.marker.set_kind(str(j.JointType),
-                             is_base_joint(j, j.Proxy.getAssembly(j)),
-                             joint_dir(j))
-        # self.setJCSPosition(self.marker, plc, ref)
-        self.place_marker(plc, ref)
+        kind = (str(j.JointType),
+                is_base_joint(j, j.Proxy.getAssembly(j)),
+                joint_dir(j))
+        if kind != getattr(self, "_kind", None):
+            self._kind = kind
+            self.marker.set_kind(*kind)
+
+        self.place_marker(plc, ref)  # self.setJCSPosition(self.marker,plc,ref)
         self.marker.whichChild = coin.SO_SWITCH_ALL
 
     def place_marker(self, plc, ref):
         """
-        setJCSPoistion function from FC
+        setJCSPosition function from FC >= v1.2
         """
         asm = self.app_obj.Proxy.getAssembly(self.app_obj)
         if asm and ref and plc:

@@ -35,7 +35,7 @@ from freecad.Robot_tools.App.rbt_robot import is_robot
 from freecad.Robot_tools.App.rbt_kine import (
     joint_limits_q_deg, curr_joint_vals_doc,
     save_home, home_q_deg, joint_dirs, jog_q_deg,
-    resolve_offsets, set_zero_pose
+    resolve_offsets, set_zero_pose, hold_part_placements
 )
 from freecad.Robot_tools.App.rbt_kine_types import (
     PRISMATIC, REVOLUTE, FIXED, joint_type_FC2WB)
@@ -101,11 +101,14 @@ def create_link_row(dlg, gbx_l, row, fnt, jr, low, hi, jtype):
     chk_flip = cm_toggle(dlg, f"chk_flip{nm}", fnt)
     gbx_l.addWidget(chk_flip, row, 7, 1, 1)
 
+    # 29.07. - fixed joints are dropeed from UI
+    # so no need for disabling block ->
+
     # disable the fixed joints in the UI
-    if jtype == FIXED:
-        lbl_jnt.setToolTip("fixed joint (no DOF)")
-        for wd in (dspb_jnt, btn_jnt_m, sl_jnt, btn_jnt_p, chk_flip):
-            wd.setEnabled(False)
+    # if jtype == FIXED:
+    #     lbl_jnt.setToolTip("fixed joint (no DOF)")
+    #     for wd in (dspb_jnt, btn_jnt_m, sl_jnt, btn_jnt_p, chk_flip):
+    #         wd.setEnabled(False)
 
 # ---------------------------------------------
 #             App Layer
@@ -119,7 +122,7 @@ class AnimationController:
         self.robot = robot_obj
         joints = robot_obj.Robot_joints
         self.j_num = len(joints)  # number of jonits
-        self.j_nms = [f"Joint{n + 1:02d}" for n in range(self.j_num)]  # jnames
+        self.j_nms = [f"Joint{n:02d}" for n in range(self.j_num)]  # jnames
         self.j_step = 1.0  # step increment size for angles
         self.j_vals = [0.0] * self.j_num  # joint values
 
@@ -160,7 +163,7 @@ class AnimationController:
             low, high = joint_limits_q_deg(self.robot, i)
             c = max(low, min(high, q[i]))
             if c != q[i]:
-                fcl_warn(f"J{i+1} home {q[i]:g} outside "
+                fcl_warn(f"J{i} home {q[i]:g} outside "
                          f"[{low:g}, {high:g}], clamped to {c:g}\n")
             q[i] = c
         self.j_vals = q
@@ -184,6 +187,8 @@ class AnimationController:
         asm = self.robot.Robot_assembly
         for jnt in self.robot.Robot_joints:
             jtype = joint_type_FC2WB(jnt.JointType)
+
+            # skip fixed joints
             if jtype == FIXED:
                 continue
 
@@ -193,9 +198,11 @@ class AnimationController:
             elif jtype == REVOLUTE:
                 nudge = Placement(VEC0, Rotation(1, 0, 0))  # 1 deg
 
-            jnt.Offset2 = nudge.multiply(of2)
+            with hold_part_placements(asm):
+                jnt.Offset2 = nudge.multiply(of2)
             asm.recompute()
-            jnt.Offset2 = of2
+            with hold_part_placements(asm):
+                jnt.Offset2 = of2
             asm.recompute()
 
 # ---------------------------------------------
@@ -293,8 +300,13 @@ class RobotControlWidget(QWidget):
         # -- Joint Rows --
         brow = 1
         for idx, jnm in enumerate(self.ctrl.j_nms):
-            low, hi = joint_limits_q_deg(self.robot, idx)
             jtype = joint_type_FC2WB(self.robot.Robot_joints[idx].JointType)
+
+            # skip making rows for fixed joints
+            if jtype == FIXED:
+                continue
+
+            low, hi = joint_limits_q_deg(self.robot, idx)
             create_link_row(self, tp_gb0l, brow, self.fnt,
                             idx + 1, low, hi, jtype)
             brow += 1
@@ -303,11 +315,22 @@ class RobotControlWidget(QWidget):
         brow += 1
 
         # -- bottom row btns --
-        tb_lay = QHBoxLayout()
-        tb_lay.setContentsMargins(0, 0, 0, 0)
+        tb1 = QHBoxLayout()
+        tb2 = QHBoxLayout()
+        tb1.setContentsMargins(0, 0, 0, 0)
+        tb2.setContentsMargins(0, 0, 0, 0)
+
+        tp_gb0l.addLayout(tb1, brow, 0, 1, 8)
+        tp_gb0l.addLayout(tb2, brow+1, 0, 1, 8)
+
+        # tb_lay = QHBoxLayout()
+        # tb_lay.setContentsMargins(0, 0, 0, 0)
+
+        # push from the left
+        tb1.addStretch(1)
 
         lbl_step = cm_lbl(self, "lbl_step", "<b>Step</b>", self.fnt, 1)
-        tb_lay.addWidget(lbl_step)
+        tb1.addWidget(lbl_step)
 
         # entry box to set step size
         dspb_step = cm_dspb(self, "dspb_step", self.fnt,
@@ -316,10 +339,22 @@ class RobotControlWidget(QWidget):
         dspb_step.setToolTip("jog step in joint units (° | mm)")
         dspb_step.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Minimum)
         dspb_step.setValue(self.ctrl.j_step)
-        tb_lay.addWidget(dspb_step)
+        tb1.addWidget(dspb_step)
 
-        # push the rest to the right
-        tb_lay.addStretch(1)
+        # reset and reload FPO buttons
+        btn_jnts_res = cm_btn(self, "btn_jnts_res", "Reset",
+                              self.fnt)
+        btn_jnts_rld = cm_btn(self, "btn_jnts_rld", "Reload FPO",
+                              self.fnt)
+        btn_jnts_rld.setToolTip("Reload FPO data ('joints directions')")
+        tb1.addWidget(btn_jnts_res)
+        tb1.addWidget(btn_jnts_rld)
+
+        # push from the right
+        tb1.addStretch(1)
+
+        # push from the left
+        tb2.addStretch(1)
 
         # home pos buttons
         btn_home_go = cm_btn(self, "btn_home_go",
@@ -334,23 +369,16 @@ class RobotControlWidget(QWidget):
             "('mastering' on industrial robots).\n"
             "The Assembly joint dialog keeps showing raw values")
 
-        tb_lay.addWidget(btn_home_go)
-        tb_lay.addWidget(btn_home_set)
-        tb_lay.addWidget(btn_zero_set)
+        tb2.addWidget(btn_home_go)
+        tb2.addWidget(btn_home_set)
+        tb2.addWidget(btn_zero_set)
+
+        # push from the left
+        tb2.addStretch(1)
 
         # spacing
-        tb_lay.addSpacing(12)
-
-        # reset and reload FPO buttons
-        btn_jnts_res = cm_btn(self, "btn_jnts_res", "Reset",
-                              self.fnt)
-        btn_jnts_rld = cm_btn(self, "btn_jnts_rld", "Reload FPO",
-                              self.fnt)
-        btn_jnts_rld.setToolTip("Reload FPO data ('joints directions')")
-        tb_lay.addWidget(btn_jnts_res)
-        tb_lay.addWidget(btn_jnts_rld)
-
-        tp_gb0l.addLayout(tb_lay, brow, 0, 1, 8)
+        tb1.addSpacing(12)
+        tb2.addSpacing(12)
 
         # buttons connections
         btn_jnts_res.clicked.connect(self._on_reset_joints)
@@ -534,12 +562,16 @@ class RobotControlWidget(QWidget):
             if dbg_s:
                 fcl_msg(f"{j_n} {jnt.Label}")
 
+            # skip fixed joints in the joint sliders
+            if joint_type_FC2WB(jnt.JointType) == FIXED:
+                continue
+
             # shorten the joint names to J<idx> to save UI space
             # set_wid_text(p_wid, f"lbl_jnt{j_n + 1:02d}", QLabel,
             #              f"<b>{jnt.Label}</b>")
             lbl = p_wid.findChild(QLabel, f"lbl_jnt{j_n + 1:02d}")
             if lbl is not None:
-                lbl.setText(f"<b>J{j_n+1}</b>")
+                lbl.setText(f"<b>J{j_n}</b>")
                 lbl.setToolTip(jnt.Label)  # full name on hover
 
             # Assign to increase angle button the action

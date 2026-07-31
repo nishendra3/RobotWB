@@ -17,6 +17,8 @@ from freecad.Robot_tools.App.rbt_placement import (
 
 from freecad.Robot_tools.backends import KIN_LIB_NAMES
 
+from freecad.Robot_tools.App.rbt_helpers_log import (
+    fcl_err, fcl_msg, fcl_warn)
 
 ROBOT_SCHEMA = [
 
@@ -99,6 +101,10 @@ class Robot:
         self.check_kin_libs(obj)
         self.check_joints_direction(obj)
         self.check_default_tool(obj)
+
+        # -- debug
+        fcl_warn(f"onDocumentRestored: {obj.Name}\n")
+        # --------
 
         # robot placement
         ensure_sync_observer()

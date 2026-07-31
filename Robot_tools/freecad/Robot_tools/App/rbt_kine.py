@@ -6,6 +6,7 @@ kinematics module for robot wb
 from __future__ import annotations
 
 import traceback
+from contextlib import contextmanager
 from typing import Dict, List, Optional, Tuple, TypeAlias
 
 import FreeCAD as App  # type: ignore
@@ -281,16 +282,17 @@ def resolve_offsets(rbt_obj, q_deg):
     try:
         dirs = joint_dirs(rbt_obj)
         zeros = joint_zeros(rbt_obj)
-        for i, joint in enumerate(rbt_obj.Robot_joints):
-            jt = joint_type_FC2WB(joint.JointType)
-            off = dirs[i]*q_deg[i] + zeros[i]
-            if jt == REVOLUTE:
-                joint.Offset2 = App.Placement(joint.Offset2.Base,
-                                              App.Rotation(off, 0, 0))
-            elif jt == PRISMATIC:
-                b = joint.Offset2.Base
-                joint.Offset2 = App.Placement(App.Vector(b.x, b.y, off),
-                                              joint.Offset2.Rotation)
+        with hold_part_placements(rbt_obj.Robot_assembly):
+            for i, joint in enumerate(rbt_obj.Robot_joints):
+                jt = joint_type_FC2WB(joint.JointType)
+                off = dirs[i]*q_deg[i] + zeros[i]
+                if jt == REVOLUTE:
+                    joint.Offset2 = App.Placement(joint.Offset2.Base,
+                                                  App.Rotation(off, 0, 0))
+                elif jt == PRISMATIC:
+                    b = joint.Offset2.Base
+                    joint.Offset2 = App.Placement(App.Vector(b.x, b.y, off),
+                                                  joint.Offset2.Rotation)
     finally:
         prefs.SetBool("SolveInJointCreation", prev)  # reset to original val
 
@@ -447,3 +449,22 @@ def ensure_pruner():
     if c_pruner is None:
         c_pruner = CachePruner()
         App.addDocumentObserver(c_pruner)
+
+
+@contextmanager
+def hold_part_placements(asm):
+    """
+    Freeze link placements across joint-property writes
+    FC "matchJCS" applies a world frame transform to
+    assembly local placements, which divergers when
+    asm.Placement != identity
+    """
+    snap = [(o, App.Placement(o.Placement))
+            for o in asm.Group if o.isDerivedFrom("App::Link")]
+    try:
+        yield
+    finally:
+        for o, plc in snap:
+            if not o.Placement.isSame(plc, 1e-9):
+                o.Placement = plc
+                o.purgeTouched()

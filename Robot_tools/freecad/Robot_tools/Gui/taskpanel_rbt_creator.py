@@ -21,7 +21,8 @@ from freecad.Robot_tools.App.rbt_helpers_log import fcl_warn
 from freecad.Robot_tools.Gui.rbt_helpers_ui import (
     load_panel_ui, get_file, msg_box, set_txt_color,
     joint_type_icon, is_alive)
-from freecad.Robot_tools.App.rbt_placement import is_base_joint
+from freecad.Robot_tools.App.rbt_placement import (is_base_joint,
+                                                   is_inertial_datum)
 from freecad.Robot_tools.App.rbt_kine_types import REVOLUTE, PRISMATIC, FIXED
 
 # --------------------------------------------------------------
@@ -49,7 +50,7 @@ GUIDANCE = {
     CreationStep.IMPORT_PARTS:
         "Pick the .FCStd that holds the robot's part bodies",
     CreationStep.CREATE_ASSEMBLY:
-        "left-click on a part to insert it "
+        "double-click on a part to insert it "
         "|| right-click to remove inserted part",
 
     # CreationStep.ADD_JOINTS:
@@ -217,7 +218,13 @@ class DefineRobot:
         for button, slot in connections.items():
             button.clicked.connect(slot)
 
-        self.parts_list.itemClicked.connect(self.on_parts_clicked)
+        # single click to add parts
+        # self.parts_list.itemClicked.connect(self.on_parts_clicked)
+
+        # dbl click to add parts
+        self.parts_list.itemDoubleClicked.connect(self.on_parts_clicked)
+        self.parts_list.setExpandsOnDoubleClick(False)
+
         self.parts_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.parts_list.customContextMenuRequested.connect(
             self.on_parts_right_clicked)
@@ -448,6 +455,12 @@ class DefineRobot:
 
         self.update_ui()
 
+        d = is_inertial_datum(link_obj, face_ref)
+        if d:
+            self.refresh_guidance(f"'{d.Label}' uses InertialCS and its "
+                                  "orientation can flip. prefer Concentric on "
+                                  "a circular edge", "w")
+
     def on_add_joint(self):
         if not self.pending_faces:
             self.refresh_guidance(
@@ -532,13 +545,13 @@ class DefineRobot:
                                grounded)
         # ----------------------------
 
-        for idx, j in enumerate(asm.Joints):
+        for j in asm.Joints:
             if j.Label2[:6] != "rb_jnt":
                 continue
             r1 = f"{j.Reference1[0].Name}.{j.Reference1[1][0]}"
             r2 = f"{j.Reference2[0].Name}.{j.Reference2[1][0]}"
-            self.add_joint_row([str(idx+1), str(j.JointType), r1, r2],
-                               j)
+            self.add_joint_row([str(int(j.Label2[6:])),
+                                str(j.JointType), r1, r2], j)
 
     def refresh_available_parts(self):
         self.parts_list.clear()
@@ -578,6 +591,7 @@ class DefineRobot:
 
     def setup_joints_table_header(self):
         t = self.joints_table
+        t.verticalHeader().setVisible(False)
         h = t.horizontalHeader()
         for c in (0, 1, 4, 5):
             h.setSectionResizeMode(c, QHeaderView.ResizeToContents)

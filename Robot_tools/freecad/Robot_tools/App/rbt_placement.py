@@ -52,6 +52,13 @@ def is_grounded_datum(obj, asm):
     return getattr(obj, "MapMode", None) in (None, "Deactivated")
 
 
+def is_inertial_datum(obj, ref):
+    if obj is None or not ref:
+        return None
+    o = UtilsAssembly.getObject([obj, [ref, ref]])
+    return o if getattr(o, "MapMode", None) == "InertialCS" else None
+
+
 def is_base_joint(joint, asm):
     """
     True if the joint's Reference1 is the

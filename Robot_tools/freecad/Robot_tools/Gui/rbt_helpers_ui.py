@@ -161,6 +161,7 @@ def cm_slider(parent, sl_nm, sl_min=-180, sl_max=180, sl_scale=100):
     """
     sl = QSlider(Qt.Horizontal)
     sl.setObjectName(sl_nm)
+    sl.setMinimumWidth(60)
     sl.setRange(int(sl_min * sl_scale), int(sl_max * sl_scale))
     sl._scale = sl_scale
     if parent is not None:

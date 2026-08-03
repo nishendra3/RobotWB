@@ -643,9 +643,9 @@ def switch_document(doc_name):
 
 
 def run(robot=None):
+    fnt = QApplication.font("QMessageBox")
     if robot is None:
         sel = Gui.Selection.getSelection()
-        fnt = QApplication.font("QMessageBox")
         if len(sel) != 1 \
                 or sel[0].TypeId != "App::FeaturePython" \
                 or not is_robot(sel[0]):
@@ -658,15 +658,15 @@ def run(robot=None):
             # name:{sel[0].Name}")
             return
 
-        if not hasattr(sel[0], "Robot_home_pos"):
-            msg_box(Gui.getMainWindow(), "Robot", fnt,
-                    "<b>Robot Missing Properties</b>"
-                    "<br><br>"
-                    "You must recreate 'Robot_FPO'")
-            return
-
         # current user selected robot fpo
         robot = sel[0]
+
+    if not hasattr(robot, "Robot_home_pos"):
+        msg_box(Gui.getMainWindow(), "Robot", fnt,
+                "<b>Robot Missing Properties</b>"
+                "<br><br>"
+                "You must recreate 'Robot_FPO'")
+        return
 
     if Gui.Control.activeDialog():
         # skip if other dialogs are open

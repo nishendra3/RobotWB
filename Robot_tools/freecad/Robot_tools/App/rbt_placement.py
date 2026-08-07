@@ -206,12 +206,32 @@ def after_base_move(robot):
     """
     refresh the tool position after robot is moved
     """
+    refresh_tool(robot)
+    refresh_trajectories(robot)
+
+
+def refresh_tool(robot):
+    """
+    recompute the active tool's tcp
+    """
     tool = getattr(robot, "Active_tool", None)
     if tool is not None:
         try:
             tool.recompute()
         except Exception as e:
             fcl_err(f"tool recompute after base move failed: {e}")
+
+
+def refresh_trajectories(robot):
+    """
+    re-aim trajectory displays
+    """
+    if not App.GuiUp:
+        return
+    for traj_obj in getattr(robot, "Trajectories", None) or []:
+        vp = getattr(traj_obj.ViewObject, "Proxy", None)
+        if vp is not None:
+            vp.refresh_frame(traj_obj)
 
 
 class BaseLinkSyncObserver:

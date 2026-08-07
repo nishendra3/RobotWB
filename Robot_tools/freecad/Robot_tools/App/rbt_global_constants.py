@@ -23,8 +23,21 @@ RBT_PREFS = "User parameter:BaseApp/Preferences/Mod/Robot_tools"
 # >0 = parts staggered away from prev added part
 DEFAULT_INSERT_STAGGER_PCT = 0.0
 
+# default robot joint speeds
+DEFAULT_MAX_SPEEDS = {
+    "revolute": 10,    # deg/sec at 100%
+    "prismatic": 100,  # mm/sec at 100%
+}
+
 MM_PER_M = 1000.0
 DEFAULT_SLIDER_TRAVEL_MM = 500
+
+# trajectory feature
+TRAJ_JSON_VERSION = 1        # Waypoints_json schema version
+DEFAULT_TRAJ_SPEED = 50.0    # % of full joint speed (ptp)
+DEFAULT_TRAJ_SAMPLES = 24    # path preview samples per segment
+
+TRAJ_TICK_MS = 33  # update trajectroy frame every 33 millisec.
 
 ap_clr = {
     "Black": [(0.0, 0.0, 0.0), "#000000"],

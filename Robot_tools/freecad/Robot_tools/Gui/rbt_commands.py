@@ -97,11 +97,70 @@ class CommandMultiControl:
         taskpanel_rbt_multicontrol.run()
 
 
+class CommandCreateTrajectory:
+    """create/open a trajectory for the selected robot"""
+
+    def GetResources(self):
+        return {"Pixmap": os.path.join(wb_path,
+                                       'resources/icons/rbt_animateRobot.svg'),
+                "MenuText": "Robot Trajectory",
+                "ToolTip": "Teach waypoints and play them as a trajectory"}
+
+    def IsActive(self):
+        return App.ActiveDocument is not None
+
+    def Activated(self):
+        from freecad.Robot_tools.App.rbt_traj import (
+            create_trajectory, is_trajectory)
+        from freecad.Robot_tools.Gui import g_rbt_traj_tpanel
+        from freecad.Robot_tools.Gui.rbt_helpers_ui import find_rob
+
+        # a selected trajectory just re-opens its panel
+        sel = [o for o in Gui.Selection.getSelection() if is_trajectory(o)]
+        if sel:
+            g_rbt_traj_tpanel.run(sel[0])
+            return
+
+        robot = find_rob()          # selected robot | only robot | None
+        if robot is None:
+            return
+        doc = App.ActiveDocument
+        doc.openTransaction("Create trajectory")
+        try:
+            traj = create_trajectory(robot)
+            doc.commitTransaction()
+        except Exception:
+            doc.abortTransaction()
+            raise
+        g_rbt_traj_tpanel.run(traj)
+
+
+class CommandTrajectoryPlayer:
+    """global player: run several trajectories in sync"""
+
+    def GetResources(self):
+        return {"Pixmap": os.path.join(wb_path,
+                                       'resources/icons/rbt_animateRobot.svg'),
+                "MenuText": "Trajectory Player",
+                "ToolTip": "Play trajectories of all robots on one clock"}
+
+    def IsActive(self):
+        doc = App.ActiveDocument
+        return doc is not None and any(
+            getattr(o, "Waypoint_count", 0) > 1 for o in doc.Objects)
+
+    def Activated(self):
+        from freecad.Robot_tools.Gui import g_rbt_traj_gplayer
+        g_rbt_traj_gplayer.run()
+
+
 commands = {
     "RBT_anrob": CommandAnimateRobot(),
     "RBT_defrob": CommandCreateRobot(),
     "RBT_deftool": CommandCreateTool(),
     "RBT_multictrl": CommandMultiControl(),
+    "RBT_deftraj": CommandCreateTrajectory(),
+    "RBT_playtraj": CommandTrajectoryPlayer(),
 }
 
 COMMAND_NAMES = list(commands.keys())

@@ -10,19 +10,22 @@ Licence: LGPL 2.1
 """
 
 import os
+
+import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
 from PySide.QtWidgets import (  # noqa # type: ignore
     QCheckBox,  QFrame, QGroupBox, QLabel,
     QDoubleSpinBox, QSlider, QToolButton,
-    QPushButton,
+    QPushButton, QInputDialog,
     QFileDialog, QMessageBox,  # Dialogs
     QGridLayout, QVBoxLayout, QScrollArea)  # Layouts and Policy
 from PySide.QtCore import QObject, Qt  # type: ignore # noqa
-from PySide.QtGui import QIcon  # type: ignore # noqa
+from PySide.QtGui import QIcon, QFont  # type: ignore # noqa
 
-from freecad.Robot_tools.App.rbt_global_constants import ap_clr
 from freecad.Robot_tools import rbt_locator
+from freecad.Robot_tools.App.rbt_global_constants import ap_clr
+from freecad.Robot_tools.App.rbt_robot import is_robot, all_robots
 
 
 # ------------------------------------------------
@@ -226,6 +229,10 @@ def get_file(parent, fnt, ftype="fcstd", pre_dir=""):
     return f_name
 
 
+def warn_box(msg, parent=None):
+    msg_box(parent, "Robot WB", QFont(), msg, "w")
+
+
 def msg_box(parent, title, fnt, msg, icon="", head="", hc=""):
     """Create a minimal message box."""
     msg_box = QMessageBox(parent)
@@ -295,3 +302,42 @@ JOINT_TYPE_ICONS = {
 def joint_type_icon(name):
     return QIcon(JOINT_TYPE_ICONS
                  .get(name, ":/icons/Assembly_CreateJoint.svg"))
+
+
+def find_rob():
+    """
+    Target robot: selection > sole robot > ask user
+    """
+    # return the first user selected robot
+    sel = [o for o in Gui.Selection.getSelection() if is_robot(o)]
+    if len(sel) == 1:
+        return sel[0]
+
+    # only one robot exists in doc
+    robs = all_robots()
+    if len(robs) == 1:
+        return robs[0]
+    if not robs:
+        return None
+
+    # ask user for disambiguation
+    names = [f"{r.Label} ({r.Name})" for r in robs]
+    pick, ok = QInputDialog.getItem(None, "Select Robot",
+                                          "Robot:", names, 0, False)
+    return robs[names.index(pick)] if ok else None
+
+
+def set_qsb(sb, value):
+    """
+    write a number into Gui::QuantitySpinBox (unit: mm, deg, kg)
+    """
+    sb.setProperty("value", App.Units.Quantity(float(value),
+                                               sb.property("unit")))
+
+
+def get_qsb(sb):
+    """
+    reads a number from Gui::QuantitySpinBox in specified unit
+    """
+    return float(App.Units.Quantity(
+        sb.property("value")).getValueAs(sb.property("unit")))

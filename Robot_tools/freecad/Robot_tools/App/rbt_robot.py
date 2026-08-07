@@ -49,6 +49,12 @@ ROBOT_SCHEMA = [
     ("Base_offset", "App::PropertyPlacement", "Placement",
      "base frame in base-link coords "
      "(moves the frame label, not the robot)"),
+
+    # trajectory properties
+    ("Trajectories", "App::PropertyLinkListGlobal", "Trajectory",
+     "Trajectories attached to this robot"),
+    ("Robot_joints_max_speed", "App::PropertyFloatList", "Kinematics",
+     "Full joint speed (=100%), deg/s (revolute) | mm/s (prismatic)"),
 ]
 
 

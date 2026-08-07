@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TrajPanel</class>
+ <widget class="QWidget" name="TrajPanel">
+  <property name="windowTitle">
+   <string>Trajectory</string>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+
+   <item>
+    <widget class="QLabel" name="lbl_robot">
+     <property name="text"><string>Robot: &lt;none&gt;</string></property>
+    </widget>
+   </item>
+
+   <item>
+    <layout class="QHBoxLayout" name="nameRow">
+     <item>
+      <widget class="QLabel" name="label_name">
+       <property name="text"><string>Name</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="le_name"/>
+     </item>
+    </layout>
+   </item>
+
+   <item>
+    <widget class="QTableWidget" name="tbl_wps">
+     <property name="selectionMode">
+      <enum>QAbstractItemView::SingleSelection</enum>
+     </property>
+     <property name="selectionBehavior">
+      <enum>QAbstractItemView::SelectRows</enum>
+     </property>
+     <attribute name="horizontalHeaderStretchLastSection">
+      <bool>true</bool>
+     </attribute>
+     <column>
+      <property name="text"><string>#</string></property>
+     </column>
+     <column>
+      <property name="text"><string>Name</string></property>
+     </column>
+     <column>
+      <property name="text"><string>Mode</string></property>
+     </column>
+     <column>
+      <property name="text"><string>Pose</string></property>
+     </column>
+     <column>
+      <property name="text"><string>Status</string></property>
+     </column>
+    </widget>
+   </item>
+
+   <item>
+    <layout class="QHBoxLayout" name="addRow">
+     <item>
+      <widget class="QPushButton" name="btn_teach">
+       <property name="text"><string>Teach</string></property>
+       <property name="toolTip"><string>capture the robot's current pose</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_pick">
+       <property name="text"><string>Pick 3D</string></property>
+       <property name="checkable"><bool>true</bool></property>
+       <property name="toolTip"><string>click model geometry to add waypoints</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_xyz">
+       <property name="text"><string>Add XYZ</string></property>
+       <property name="checkable"><bool>true</bool></property>
+       <property name="toolTip"><string>type coordinates for a new waypoint</string></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <item>
+    <widget class="QGroupBox" name="grp_xyz">
+     <property name="title"><string>New point (robot coords)</string></property>
+     <property name="visible"><bool>false</bool></property>
+     <layout class="QGridLayout" name="xyzGrid">
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_x"><property name="text"><string>X</string></property></widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="Gui::QuantitySpinBox" name="qsb_x"/>
+      </item>
+      <item row="0" column="2">
+       <widget class="QLabel" name="label_yaw"><property name="text"><string>Yaw</string></property></widget>
+      </item>
+      <item row="0" column="3">
+       <widget class="Gui::QuantitySpinBox" name="qsb_yaw"/>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_y"><property name="text"><string>Y</string></property></widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="Gui::QuantitySpinBox" name="qsb_y"/>
+      </item>
+      <item row="1" column="2">
+       <widget class="QLabel" name="label_pitch"><property name="text"><string>Pitch</string></property></widget>
+      </item>
+      <item row="1" column="3">
+       <widget class="Gui::QuantitySpinBox" name="qsb_pitch"/>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="label_z"><property name="text"><string>Z</string></property></widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="Gui::QuantitySpinBox" name="qsb_z"/>
+      </item>
+      <item row="2" column="2">
+       <widget class="QLabel" name="label_roll"><property name="text"><string>Roll</string></property></widget>
+      </item>
+      <item row="2" column="3">
+       <widget class="Gui::QuantitySpinBox" name="qsb_roll"/>
+      </item>
+      <item row="3" column="3">
+       <widget class="QPushButton" name="btn_xyz_add">
+        <property name="text"><string>Add</string></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <item>
+    <layout class="QHBoxLayout" name="editRow">
+     <item>
+      <widget class="QPushButton" name="btn_up">
+       <property name="text"><string>Up</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_down">
+       <property name="text"><string>Down</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_del">
+       <property name="text"><string>Delete</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_goto">
+       <property name="text"><string>Go to</string></property>
+       <property name="toolTip"><string>move the robot to the selected waypoint</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_update">
+       <property name="text"><string>Update</string></property>
+       <property name="toolTip"><string>re-teach the selected waypoint from the current pose</string></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <item>
+    <widget class="QGroupBox" name="grp_timing">
+     <property name="title"><string>Timing</string></property>
+     <layout class="QGridLayout" name="timingGrid">
+      <item row="0" column="0">
+       <widget class="QRadioButton" name="rb_speed">
+        <property name="text"><string>Speed</string></property>
+        <property name="checked"><bool>true</bool></property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QDoubleSpinBox" name="dsb_speed">
+        <property name="minimum"><double>1.0</double></property>
+        <property name="maximum"><double>100.0</double></property>
+        <property name="value"><double>50.0</double></property>
+        <property name="suffix"><string> %</string></property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QRadioButton" name="rb_dur">
+        <property name="text"><string>Total time</string></property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QDoubleSpinBox" name="dsb_dur">
+        <property name="minimum"><double>0.01</double></property>
+        <property name="maximum"><double>10000.0</double></property>
+        <property name="decimals"><number>2</number></property>
+        <property name="suffix"><string> s</string></property>
+       </widget>
+      </item>
+      <item row="2" column="0" colspan="2">
+       <widget class="QPushButton" name="btn_floor">
+        <property name="text"><string>min time</string></property>
+        <property name="flat"><bool>true</bool></property>
+        <property name="visible"><bool>false</bool></property>
+        <property name="toolTip"><string>apply the fastest achievable total time</string></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <item>
+    <layout class="QVBoxLayout" name="lay_play"/>
+   </item>
+
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>Gui::QuantitySpinBox</class>
+   <extends>QAbstractSpinBox</extends>
+   <header>Gui/QuantitySpinBox.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

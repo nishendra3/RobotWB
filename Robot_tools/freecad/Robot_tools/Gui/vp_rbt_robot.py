@@ -58,6 +58,7 @@ class ViewProviderRobot:
         if getattr(obj, "Robot_assembly", None):
             kids.append(obj.Robot_assembly)
         kids.extend(getattr(obj, "Tools", []) or [])
+        kids.extend(getattr(obj, "Trajectories", []) or [])
         return kids
 
     def doubleClicked(self, vobj):

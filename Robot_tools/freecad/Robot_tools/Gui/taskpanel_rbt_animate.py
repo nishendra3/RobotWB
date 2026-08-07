@@ -101,15 +101,6 @@ def create_link_row(dlg, gbx_l, row, fnt, jr, low, hi, jtype):
     chk_flip = cm_toggle(dlg, f"chk_flip{nm}", fnt)
     gbx_l.addWidget(chk_flip, row, 7, 1, 1)
 
-    # 29.07. - fixed joints are dropeed from UI
-    # so no need for disabling block ->
-
-    # disable the fixed joints in the UI
-    # if jtype == FIXED:
-    #     lbl_jnt.setToolTip("fixed joint (no DOF)")
-    #     for wd in (dspb_jnt, btn_jnt_m, sl_jnt, btn_jnt_p, chk_flip):
-    #         wd.setEnabled(False)
-
 # ---------------------------------------------
 #             App Layer
 # ---------------------------------------------
@@ -322,9 +313,6 @@ class RobotControlWidget(QWidget):
 
         tp_gb0l.addLayout(tb1, brow, 0, 1, 8)
         tp_gb0l.addLayout(tb2, brow+1, 0, 1, 8)
-
-        # tb_lay = QHBoxLayout()
-        # tb_lay.setContentsMargins(0, 0, 0, 0)
 
         # push from the left
         tb1.addStretch(1)

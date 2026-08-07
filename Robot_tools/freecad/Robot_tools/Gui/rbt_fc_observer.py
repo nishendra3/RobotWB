@@ -12,10 +12,16 @@ Licence: LGPL 2.1
 __version__ = "0.01"
 __build__ = "20260507_1255"
 
+from typing import TYPE_CHECKING
+
 import FreeCAD as App  # type: ignore
 from PySide.QtCore import QTimer  # type: ignore
 
 from freecad.Robot_tools.Gui.rbt_helpers_ui import is_alive
+from freecad.Robot_tools.App.rbt_traj_types import DocObj
+if TYPE_CHECKING:
+    from freecad.Robot_tools.Gui.g_rbt_traj_ctrl_wgt import (
+        TrajectoryControlWidget)
 
 """
 ----------------------------------------
@@ -111,3 +117,30 @@ class RbtMultiCtrlObserver:
             App.removeDocumentObserver(self)
         except Exception:
             pass
+
+
+class TrajPickObserver:
+    """
+    Selection observer for the trajectory panel's 'Pick 3D' mode.
+    """
+    def __init__(self, on_pick) -> None:
+        self.on_pick = on_pick
+
+    def addSelection(self, doc, obj, sub, pos) -> None:
+        if pos == (0.0, 0.0, 0.0):
+            return   # tree click, no 3d point
+        self.on_pick(App.Vector(*pos))
+
+
+class TrajDocObserver:
+    """
+    mirror trajectory property changes into the traj panel
+    """
+    def __init__(self, w: "TrajectoryControlWidget") -> None:
+        self.w = w
+
+    def slotChangedObject(self, obj: DocObj, prop: str) -> None:
+        try:
+            self.w.on_doc_changed(obj, prop)
+        except RuntimeError:
+            App.removeDocumentObserver(self)

@@ -3,15 +3,14 @@
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 from PySide import QtGui  # type: ignore
-from PySide.QtWidgets import QInputDialog  # type: ignore
 
-from freecad.Robot_tools.App.rbt_robot import is_robot, all_robots
 from freecad.Robot_tools.App.rbt_tool import (
     Tool, import_shape, has_valid_shape)
 from freecad.Robot_tools.App.rbt_creator_geom import find_center
-from freecad.Robot_tools.App.rbt_helpers_log import (
-    fcl_err, fcl_warn)
-from freecad.Robot_tools.Gui.rbt_helpers_ui import is_alive
+from freecad.Robot_tools.App.rbt_helpers_log import fcl_err
+from freecad.Robot_tools.Gui.rbt_helpers_ui import (
+    is_alive, set_qsb, get_qsb, find_rob
+)
 
 
 # helpers
@@ -34,22 +33,6 @@ def create_default_tool(robot, name="Default_Tool"):
     robot.Tools = list(robot.Tools) + [tool_fpo]
     robot.Active_tool = tool_fpo
     return tool_fpo
-
-
-def set_qsb(sb, value):
-    """
-    write a number into Gui::QuantitySpinBox (unit: mm, deg, kg)
-    """
-    sb.setProperty("value", App.Units.Quantity(float(value),
-                                               sb.property("unit")))
-
-
-def get_qsb(sb):
-    """
-    reads a number from Gui::QuantitySpinBox in specified unit
-    """
-    return float(App.Units.Quantity(
-        sb.property("value")).getValueAs(sb.property("unit")))
 
 
 class DefineTCP:
@@ -312,26 +295,3 @@ def run():
         fcl_err("robot has no joints yet")
         return
     Gui.Control.showDialog(DefineTCP(robot))
-
-
-def find_rob():
-    """
-    Target robot: selection > sole robot > ask user
-    """
-    # return the first user selected robot
-    sel = [o for o in Gui.Selection.getSelection() if is_robot(o)]
-    if len(sel) == 1:
-        return sel[0]
-
-    # only one robot exists in doc
-    robs = all_robots()
-    if len(robs) == 1:
-        return robs[0]
-    if not robs:
-        return None
-
-    # ask user for disambiguation
-    names = [f"{r.Label} ({r.Name})" for r in robs]
-    pick, ok = QInputDialog.getItem(None, "Select Robot",
-                                          "Robot:", names, 0, False)
-    return robs[names.index(pick)] if ok else None

@@ -22,7 +22,7 @@ from freecad.Robot_tools.backends import load_kinematics_lib
 from freecad.Robot_tools.backends.base import KinematicsBackend
 from freecad.Robot_tools.App.rbt_placement import p_asm_in_world
 from freecad.Robot_tools.App.rbt_global_constants import (
-    DEFAULT_KIN_LIB, PIP_HINTS)
+    DEFAULT_KIN_LIB, PIP_HINTS, DEFAULT_MAX_SPEEDS)
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_err, fcl_warn
 
 Placement: TypeAlias = App.Placement
@@ -334,6 +334,35 @@ def expand_chain(dof_vals, mask, fill):
     return [next(it) if m else f for m, f in zip(mask, fill)]
 
 
+def fk_tcp_in_asm(rbt_obj, q_doc: List[float]) -> Optional[Placement]:
+    """
+    FK to the TCP without touching the document
+    in: robot fpo, joint values in doc units
+    out: tcp placement in robot-asm coords / None
+    """
+    chain = get_chain(rbt_obj)
+    if chain is None:
+        return None
+    if len(q_doc) != len(chain.joints):
+        fcl_err("Joints length does not match kinematic chain length")
+        return None
+
+    F = App.Placement(chain.base_in_asm)
+    for i, joint in enumerate(chain.joints):
+        # forward pass
+        F = F.multiply(joint.parent_to_joint)
+        if joint.type == REVOLUTE:
+            t = App.Vector()
+            r = App.Rotation(joint.axis, q_doc[i])
+            F = F.multiply(App.Placement(t, r))
+        elif joint.type == PRISMATIC:
+            t = joint.axis * q_doc[i]
+            r = App.Rotation()
+            F = F.multiply(App.Placement(t, r))
+
+    return F.multiply(chain.flange_local)
+
+
 def fk(
         rbt_obj: "App.DocumentObject",
         q_deg: Optional[List[float]] = None
@@ -365,22 +394,17 @@ def fk(
         return None
 
 
-def ik(
+def ik_tcp_in_asm(
         rbt_obj: "App.DocumentObject",
-        target: Placement,
+        target_in_asm: Placement,
         q_seed_deg: Optional[List[float]] = None,
         pos_tol_mm: float = 0.01,
         rot_tol_deg: float = 0.5,
         ) -> Optional[List[float]]:
     """
-        Runs inverse kinematic pass and returns
-        the list of joint angles.
-        Inputs:
-            - rbt_obj: Robot FC Object
-            - target: Target TCP placement
-            - q_seed_deg: Initial joint angles for IK solver
-            - pos_tol_mm: Accuracy tolerance in position (millimeters)
-            - rot_tol_deg: Accuracy tolerance in orientation (degrees)
+        Runs inverse kinematic pass in the assembly coordinate frame
+        attached to base link of the robot.
+        Returns the list of joint angles.
     """
     be = get_backend(rbt_obj)
     if be is None:
@@ -401,9 +425,6 @@ def ik(
 
     # ik pass
     try:
-        target_in_asm = (p_asm_in_world(rbt_obj)
-                         .inverse()
-                         .multiply(target))
         q_rad: Optional[List[float]] = be.ik(
             target_in_asm, q_seed_rad,
             pos_tol=pos_tol_mm / 1000.0,
@@ -422,6 +443,29 @@ def ik(
                                       mask, q_seed_deg)
 
     return q_deg
+
+
+def ik(
+        rbt_obj: "App.DocumentObject",
+        target_in_world: Placement,
+        q_seed_deg: Optional[List[float]] = None,
+        pos_tol_mm: float = 0.01,
+        rot_tol_deg: float = 0.5,
+        ) -> Optional[List[float]]:
+    """
+        Runs inverse kinematic pass in the world coordinate frame.
+        Returns the list of joint angles.
+        Inputs:
+            - rbt_obj: Robot FC Object
+            - target: Target TCP placement
+            - q_seed_deg: Initial joint angles for IK solver
+            - pos_tol_mm: Accuracy tolerance in position (millimeters)
+            - rot_tol_deg: Accuracy tolerance in orientation (degrees)
+    """
+    target_in_asm = (p_asm_in_world(rbt_obj)
+                     .inverse().multiply(target_in_world))
+    return ik_tcp_in_asm(rbt_obj, target_in_asm, q_seed_deg,
+                         pos_tol_mm, rot_tol_deg)
 
 
 class CachePruner:
@@ -468,3 +512,26 @@ def hold_part_placements(asm):
             if not o.Placement.isSame(plc, 1e-9):
                 o.Placement = plc
                 o.purgeTouched()
+
+
+def joint_max_speeds(rbt_obj) -> List[float]:
+    """
+    per-joint full speed (use defaults if missing)
+    in: robot_fpo
+    out: List[deg/sec (revolute)|mm/sec (prismatic)|0 (fixed)]
+    """
+    stored = list(getattr(rbt_obj, "Robot_joints_max_speed", None) or [])
+    speeds: List[float] = []
+    for i, jnt in enumerate(rbt_obj.Robot_joints):
+        if i < len(stored) and stored[i] > 0.0:
+            speeds.append(float(stored[i]))
+            continue
+        jtype = joint_type_FC2WB(jnt.JointType)
+        if jtype == REVOLUTE:
+            speeds.append(DEFAULT_MAX_SPEEDS[REVOLUTE])
+        elif jtype == PRISMATIC:
+            speeds.append(DEFAULT_MAX_SPEEDS[PRISMATIC])
+        else:
+            speeds.append(0.0)
+
+    return speeds

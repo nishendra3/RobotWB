@@ -17,6 +17,11 @@ analyzing, and interacting with robots.
 
 ## Installation
 
+### Stable version
+
+Use the latest release and download the zip file and install in your FreeCAD `Mod` folder.
+
+### development version
 Copy the `freecad/Robot_tools` directory into your FreeCAD `Mod` folder:
 `[FreeCAD user dir]/Mod/Robot_tools/freecad/Robot_tools`
 

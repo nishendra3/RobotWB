@@ -47,6 +47,15 @@
       <property name="text"><string>Mode</string></property>
      </column>
      <column>
+      <property name="text"><string>Motion</string></property>
+     </column>
+     <column>
+      <property name="text"><string>Pace</string></property>
+     </column>
+     <column>
+      <property name="text"><string>Unit</string></property>
+     </column>
+     <column>
       <property name="text"><string>Pose</string></property>
      </column>
      <column>
@@ -166,39 +175,31 @@
     <widget class="QGroupBox" name="grp_timing">
      <property name="title"><string>Timing</string></property>
      <layout class="QGridLayout" name="timingGrid">
+      
       <item row="0" column="0">
-       <widget class="QRadioButton" name="rb_speed">
-        <property name="text"><string>Speed</string></property>
-        <property name="checked"><bool>true</bool></property>
-       </widget>
-      </item>
-      <item row="0" column="1">
-       <widget class="QDoubleSpinBox" name="dsb_speed">
+       <widget class="QDoubleSpinBox" name="dsb_ptp_speed">
         <property name="minimum"><double>1.0</double></property>
         <property name="maximum"><double>100.0</double></property>
         <property name="value"><double>50.0</double></property>
         <property name="suffix"><string> %</string></property>
        </widget>
       </item>
-      <item row="1" column="0">
-       <widget class="QRadioButton" name="rb_dur">
-        <property name="text"><string>Total time</string></property>
+      
+      <item row="0" column="1">
+       <widget class="QDoubleSpinBox" name="dsb_lin_speed">
+        <property name="minimum"><double>1</double></property>
+        <property name="maximum"><double>999.0</double></property>
+        <property name="value"><double>100.0</double></property>
+        <property name="suffix"><string> mm/s</string></property>
        </widget>
       </item>
-      <item row="1" column="1">
-       <widget class="QDoubleSpinBox" name="dsb_dur">
-        <property name="minimum"><double>0.01</double></property>
-        <property name="maximum"><double>10000.0</double></property>
-        <property name="decimals"><number>2</number></property>
-        <property name="suffix"><string> s</string></property>
-       </widget>
-      </item>
-      <item row="2" column="0" colspan="2">
-       <widget class="QPushButton" name="btn_floor">
-        <property name="text"><string>min time</string></property>
-        <property name="flat"><bool>true</bool></property>
-        <property name="visible"><bool>false</bool></property>
-        <property name="toolTip"><string>apply the fastest achievable total time</string></property>
+      
+      <item row="0" column="2">
+       <widget class="QDoubleSpinBox" name="dsb_override">
+        <property name="minimum"><double>1.0</double></property>
+        <property name="maximum"><double>100.0</double></property>
+        <property name="value"><double>100.0</double></property>
+        <property name="suffix"><string> %</string></property>
        </widget>
       </item>
      </layout>

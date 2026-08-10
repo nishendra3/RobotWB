@@ -118,6 +118,14 @@ def p_asm_in_world(robot) -> App.Placement:
     return robot.Robot_assembly.getGlobalPlacement()
 
 
+def p_world_to_asm(robot, plc_world: App.Placement) -> App.Placement:
+    return p_asm_in_world(robot).inverse().multiply(plc_world)
+
+
+def p_asm_to_world(robot, plc_asm: App.Placement) -> App.Placement:
+    return p_asm_in_world(robot).multiply(plc_asm)
+
+
 def p_parent_in_world(robot) -> App.Placement:
     """
     pose of the frame the assembly is kept in
@@ -231,7 +239,7 @@ def refresh_trajectories(robot):
     for traj_obj in getattr(robot, "Trajectories", None) or []:
         vp = getattr(traj_obj.ViewObject, "Proxy", None)
         if vp is not None:
-            vp.refresh_frame(traj_obj)
+            vp.resample(traj_obj)
 
 
 class BaseLinkSyncObserver:

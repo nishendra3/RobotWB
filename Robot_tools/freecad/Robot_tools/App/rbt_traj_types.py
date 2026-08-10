@@ -7,16 +7,14 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from typing import (
-    Dict, List, Literal, Optional, Protocol,
-    TypeAlias
-)
+    Dict, List, Literal, Optional, TypeAlias
+    )
 
 import FreeCAD as App  # type: ignore
 
 Placement: TypeAlias = App.Placement
 TargetMode: TypeAlias = Literal["joint", "cartesian"]
 MotionType: TypeAlias = Literal["ptp", "lin"]
-TimingMode: TypeAlias = Literal["speed", "duration"]
 
 V3: TypeAlias = App.Vector
 DocObj: TypeAlias = App.DocumentObject
@@ -29,12 +27,8 @@ CARTESIAN: TargetMode = "cartesian"
 PTP: MotionType = "ptp"
 LIN: MotionType = "lin"
 
-# timing modes
-BY_SPEED: TimingMode = "speed"  # calculate time from speed
-BY_DURATION: TimingMode = "duration"  # time user provided
-
 # reference frames
-FRAME_ASM: str = "asm"  # robot asm coords
+FRAME_WORLD: str = "world"  # FreeCAD world coords (WCS)
 
 
 def new_uid() -> str:
@@ -54,7 +48,7 @@ class Waypoint:
         - name: user label
         - mode: JOINT/CARTESIAN
         - q_doc: joint values in doc units (deg / mm)
-        - tcp_in_asm: tcp pose in robot-asm coords
+        - tcp_in_world: tcp pose in world coords (WCS)
         - frame: reference frame key
         - motion: PTP/LIN
         - speed: per-segment speed override
@@ -65,8 +59,7 @@ class Waypoint:
     name: str
     mode: TargetMode = JOINT
     q_doc: List[float] = field(default_factory=list)
-    tcp_in_asm: Placement = field(default_factory=App.Placement)
-    frame: str = FRAME_ASM
+    tcp_in_world: Placement = field(default_factory=App.Placement)
     motion: MotionType = PTP
     speed: Optional[float] = None
     blend: Optional[float] = None
@@ -76,16 +69,15 @@ class Waypoint:
         """
         out: plain-json dict for the Waypoints_json property
         """
-        base = self.tcp_in_asm.Base
-        qx, qy, qz, qw = self.tcp_in_asm.Rotation.Q
+        base = self.tcp_in_world.Base
+        qx, qy, qz, qw = self.tcp_in_world.Rotation.Q
         return {
             "uid": self.uid,
             "name": self.name,
             "mode": self.mode,
             "q_doc": list(self.q_doc),
-            "tcp_in_asm": [base.x, base.y, base.z,
+            "tcp_in_world": [base.x, base.y, base.z,
                            qx, qy, qz, qw],
-            "frame": self.frame,
             "motion": self.motion,
             "speed": self.speed,
             "blend": self.blend,
@@ -99,15 +91,14 @@ class Waypoint:
         out: Waypoint (missing key fallbacks to default vals)
         """
         x, y, z, qx, qy, qz, qw = data.get(
-            "tcp_in_asm", [0, 0, 0, 0, 0, 0, 1])
+            "tcp_in_world", [0, 0, 0, 0, 0, 0, 1])
         return Waypoint(
             uid=data.get("uid") or new_uid(),
             name=data.get("name", ""),
             mode=data.get("mode", JOINT),
             q_doc=list(data.get("q_doc", [])),
-            tcp_in_asm=App.Placement(App.Vector(x, y, z),
+            tcp_in_world=App.Placement(App.Vector(x, y, z),
                                      App.Rotation(qx, qy, qz, qw)),
-            frame=data.get("frame", FRAME_ASM),
             motion=data.get("motion", PTP),
             speed=data.get("speed"),
             blend=data.get("blend"),
@@ -129,79 +120,86 @@ class SolvedWaypoint:
     err_msg: str = ""
 
 
-class MotionSegment(Protocol):
-    """
-    One waypoint-to-waypoint motion
-    travel_joints paces PTP motion (slowest joint on the robot)
-    tavel_tcp paces LIN motion (tcp travel speed in mm/s)
-    """
-    travel_tcp: float  # tcp path length mm
-    travel_joints: List[float]  # |dq| per joint (deg|mm)
-
-    def q_at(self, s: float) -> List[float]:
-        """
-        in : s, normalised path parameter 0..1
-        out: joint values in doc units
-        """
-
-
 @dataclass
-class PtpSegment:
+class PathSegment:
     """
-    joint-space linear interpolation between two joint poses
+    polyline of joint step points between two waypoints
+    PTP -> 2 pts (plain joint lerp), travel_tcp/rot = 0
+    LIN -> IK-solved step points along the cartesian line
     """
-    q_from: List[float]
-    q_to: List[float]
+    q_step_pts: List[List[float]]   # step points joint vals bw two endpoints
 
-    # travel_tcp is set as 0 here just
-    # for cosmetic reasons to satisfy MotionSegment
-    travel_tcp: float = 0.0
+    travel_tcp: float  # straight line tcp motion (mm)
+    travel_rot: float  # shortest arc bw endpoints (deg)
 
     @property
-    def travel_joints(self) -> List[float]:
+    def travel_joints(self):
         """
-        out: |q_to - q_from| per joint (deg|mm)
+        joint travel for display in gui
         """
-        return [abs(b-a) for a, b in zip(self.q_from, self.q_to)]
+        return [sum(abs(q_b[j] - q_a[j])
+                    for q_a, q_b in zip(self.q_step_pts, self.q_step_pts[1:]))
+                for j in range(len(self.q_step_pts[0]))]
 
-    def q_at(self, s: float) -> List[float]:
+    def q_at(self, s):
+        s = min(max(s, 0), 1)  # normalised factor ( 0 .. 1)
+
+        # find the idx of sample point bw the
+        # two endpoints we are closest to
+        sample_pos = s * (len(self.q_step_pts) - 1)
+        idx = min(int(sample_pos), len(self.q_step_pts)-2)
+
+        # remaining fraction from the nearest point
+        frac = sample_pos - idx
+
+        q_a, q_b = self.q_step_pts[idx], self.q_step_pts[idx+1]
+        return [v_a + frac*(v_b-v_a) for v_a, v_b in zip(q_a, q_b)]
+
+    def min_time_possible(self, max_speeds: List[float]) -> tuple[float, int]:
         """
-        in: s, normalised path parameter 0..1
-        out: q_from + s * (q_to - q_from)
+        Min time possible when all joints are
+        within limit. \n
+        - in: max_speeds - max speed of the rob joints
+        - out: (min time possible, joint idx pacing the motion)
         """
-        s = min(max(s, 0.0), 1.0)
-        return [a + s*(b-a) for a, b in zip(self.q_from, self.q_to)]
+        n_steps = len(self.q_step_pts) - 1
+        t100, pace_joint = 0, -1
+        for q_a, q_b in zip(self.q_step_pts, self.q_step_pts[1:]):
+            for j, vmax in enumerate(max_speeds):
+                if vmax > 0 and n_steps*abs(q_b[j]-q_a[j])/vmax > t100:
+                    t100, pace_joint = n_steps*abs(q_b[j]-q_a[j])/vmax, j
+        return t100, pace_joint
 
 
 @dataclass(frozen=True)
-class TimingRequest:
+class SpeedSettings:
     """
-    Robot timing mode wished by the user (non-mutable). \n
+    Robot speed settings by the user (defaults used otherwise). \n
     Contains:
-        - mode: BY_SPEED | BY_DURATION
-        - speed: % of full joint speed (ptp) | tcp mm/s (lin)
-        - duration: wanted total run time sec (only in BY_DURATION)
+        - lin_speed: tcp mm/s (lin)
+        - ptp_speed: % of max possible robot speed for that segment (ptp)
+        - override: global speed scaling (1-100 %)
     """
-    mode: TimingMode
-    speed: float = 100.0
-    duration: float = 0.0  # sec
+    lin_speed_default: float = 0.0  # mm/sec  (set in load_speed_settings)
+    ptp_speed_default: float = 0.0  # % (set in load_speed_settings)
+    override: float = 100.0         # %
 
 
 @dataclass(frozen=True)
-class TimingReport:
+class PlanTiming:
     """
-    Feasibility check for the TimingRequest by user (non-mutable)
+    Feasibility check for the SpeedSettings by user (non-mutable)
     & drives the motion panel status line & play/pause btn states. \n
     Contains:
         - duration: total runtime taken by trajectory plan (sec)
-        - speed: applied speed value (should not exceed > 100% of max speed)
+        - ptp_speed: applied speed value (<= 100% (of max speed))
         - feasible: True when the speed/timing is valid
         - min_duration: best possible time when running at max robot speed
         - pace_sec / pace_joint: the slowest joint determining motion time
         - err_msg: error message when the timing is infeasible
     """
     duration: float
-    speed: float
+    ptp_speed: float
     feasible: bool = True
     min_duration: float = 0.0  # total time at 100% speed
     pace_seg: int = -1

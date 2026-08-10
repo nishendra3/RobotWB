@@ -7,7 +7,7 @@ import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
 from pivy import coin  # type: ignore
-from freecad.Robot_tools.App.rbt_helpers_log import fcl_err, fcl_msg
+from freecad.Robot_tools.App.rbt_helpers_log import fcl_err, fcl_msg, fcl_warn
 from freecad.Robot_tools.App.rbt_helpers_frames import jog_rotation
 from freecad.Robot_tools.App.rbt_tool import tool_parent
 from freecad.Robot_tools.Gui.taskpanel_rbt_tool import DefineTCP
@@ -143,6 +143,9 @@ class ViewProviderTool:
                 else [])
 
     def doubleClicked(self, vobj):
+        if Gui.Control.activeDialog():
+            fcl_warn("close the active task panel first")
+            return True
         # Find the robot that owns this tool.
         robot = tool_parent(vobj.Object)
         if robot is None:
@@ -291,8 +294,8 @@ class ViewProviderTool:
         sol = None
 
         try:
-            sol = rbt_kine.ik(self.robot, target,
-                              q_seed_deg=self._q_seed)
+            sol = rbt_kine.ik_tcp_in_world(
+                self.robot, target, q_seed_deg=self._q_seed)
         except Exception as e:
             fcl_err(f"failed to solve IK {e}\n")
 

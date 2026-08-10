@@ -11,7 +11,6 @@ from freecad.Robot_tools import rbt_locator
 from freecad.Robot_tools.App import rbt_traj, rbt_traj_plan
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_warn
 from freecad.Robot_tools.App.rbt_global_constants import ap_clr
-from freecad.Robot_tools.App.rbt_placement import p_asm_in_world
 from freecad.Robot_tools.App.rbt_traj_types import DocObj, Waypoint
 from freecad.Robot_tools.Gui import so_helpers as so
 
@@ -46,7 +45,7 @@ class ViewProviderTrajectory:
         self.Object = vobj.Object
 
         # init asm to world pose
-        self.asm_tx = coin.SoTransform()
+        self.uframe_tx = coin.SoTransform()
 
         # path & wp marker separators
         self.path_sep = coin.SoSeparator()
@@ -56,10 +55,9 @@ class ViewProviderTrajectory:
         self.wp_mats: Dict[str, coin.SoMaterial] = {}
         self.wp_seps: Dict[str, coin.SoSeparator] = {}
 
-        root = so.sep(self.asm_tx, self.path_sep, self.marker_sep)
+        root = so.sep(self.uframe_tx, self.path_sep, self.marker_sep)
         vobj.addDisplayMode(root, "Standard")
 
-        self.refresh_frame(vobj.Object)
         self.resample(vobj.Object)
 
     def updateData(self, fp: DocObj, prop: str) -> None:
@@ -69,7 +67,6 @@ class ViewProviderTrajectory:
         if prop in ("Waypoints_json", "Preview_samples"):
             self.resample(fp)
         elif prop == "Robot":
-            self.refresh_frame(fp)
             self.resample(fp)
 
     def resample(self, fp: DocObj) -> None:
@@ -98,7 +95,7 @@ class ViewProviderTrajectory:
         mat = so.material(COLOR_WP)
         sphere = coin.SoSphere()
         sphere.radius.setValue(WP_RADIUS_MM)
-        b = wp.tcp_in_asm.Base
+        b = wp.tcp_in_world.Base
         mk = so.sep(so.transform((b.x, b.y, b.z)), mat, sphere)
 
         # store the marker information
@@ -124,7 +121,7 @@ class ViewProviderTrajectory:
         if plan is None:
             return
 
-        path_points = rbt_traj_plan.sample_tcp_path_asm(
+        path_points = rbt_traj_plan.sample_tcp_path_world(
             robot, plan, fp.Preview_samples)
 
         style = coin.SoDrawStyle()
@@ -133,18 +130,6 @@ class ViewProviderTrajectory:
             self.path_sep.addChild(
                 so.polyline([(p.x, p.y, p.z) for p in pts],
                             style, so.color(COLOR_PATH)))
-
-    def refresh_frame(self, fp: DocObj) -> None:
-        """
-        re-read the asm->world transform after base move
-        """
-        robot = fp.Robot
-        if robot is None:
-            return
-        plc = p_asm_in_world(robot)
-        self.asm_tx.translation.setValue(plc.Base.x, plc.Base.y,
-                                         plc.Base.z)
-        self.asm_tx.rotation.setValue(*plc.Rotation.Q)
 
     def highlight_wp(self, uid: str) -> None:
         """

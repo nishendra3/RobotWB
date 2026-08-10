@@ -1,13 +1,7 @@
-"""numpy_dls.py — zero-dependency DLS IK backend (BENCHMARK ONLY).
-
-Damped-least-squares with analytic geometric Jacobian. Position-only,
-mirroring the current ikpy backend behaviour (orientation_mode=None,
-rot_tol accepted but unused). Known throwaway limitations: hard clamp
-at joint limits can stall near limits (solver then returns None =
-skipped frame, same as an ikpy reject); unreachable targets return None.
-Delete this file + its two registration lines after benchmarking.
 """
-
+numpy_dls.py — DLS IK backend.
+Damped-least-squares with analytic geometric Jacobian
+"""
 from __future__ import annotations
 
 from typing import List, Optional, TypeAlias
@@ -45,6 +39,21 @@ def _trans4(axis: np.ndarray, q: float) -> np.ndarray:
     M = np.eye(4)
     M[0:3, 3] = axis * q
     return M
+
+
+def _mat3_to_rotvec(R):
+    """axis*angle (rad) of a 3x3 rotation"""
+    tr = np.clip((np.trace(R) - 1.0) * 0.5, -1.0, 1.0)
+    ang = float(np.arccos(tr))
+    if ang < 1e-9:
+        return np.zeros(3)
+    if ang > np.pi - 1e-6:
+        A = (R + np.eye(3)) * 0.5
+        k = int(np.argmax(np.diag(A)))
+        axis = A[:, k] / np.sqrt(max(A[k, k], 1e-12))
+        return axis / np.linalg.norm(axis) * ang
+    w = np.array([R[2, 1]-R[1, 2], R[0, 2]-R[2, 0], R[1, 0]-R[0, 1]])
+    return w * (0.5 * ang / np.sin(ang))
 
 
 class NumpyDLSBackend:
@@ -91,8 +100,8 @@ class NumpyDLSBackend:
         self,
         target: Placement,
         q_seed_rad: List[float],
-        pos_tol: float = 1e-4,   # meters
-        rot_tol: float = 1e-3,   # radians (unused: position-only parity)
+        pos_tol: float = 1e-4,  # meters
+        rot_tol: float = 1e-3,  # radians
         max_iter: int = 50,
     ) -> Optional[List[float]]:
         assert self._chain is not None
@@ -103,17 +112,26 @@ class NumpyDLSBackend:
 
         # target into base-local meters (same convention as ikpy backend)
         t_loc = self._chain.base_in_asm.inverse().multiply(target)
-        p_t = placement_to_matrix4(t_loc)[0:3, 3]
+        T_t = placement_to_matrix4(t_loc)
+        p_t = T_t[0:3, 3]
+        R_t = T_t[0:3, 0:3]
+
+        def task_err(T):
+            """(stacked 6-error, converged) vs target, base-local"""
+            e_pos = p_t - T[0:3, 3]
+            e_rot = _mat3_to_rotvec(R_t @ T[0:3, 0:3].T)   # base-frame, rad
+            done = (np.linalg.norm(e_pos) < pos_tol
+                    and np.linalg.norm(e_rot) < rot_tol)
+            return np.concatenate([e_pos, e_rot]), done
 
         q = np.asarray(q_seed_rad, dtype=float).copy()
-        I3 = np.eye(3)
+        I_task = np.eye(6)
 
         for _ in range(max_iter):
             T, zs, ps, prisms = self._fk_jac_frames(q)
             p_e = T[0:3, 3]
-            e = p_t - p_e
-            e_norm = np.linalg.norm(e)
-            if e_norm < pos_tol:
+            e, done = task_err(T)
+            if done:
                 return [float(v) for v in q]
 
             # geometric Jacobian, position rows:
@@ -121,14 +139,17 @@ class NumpyDLSBackend:
             J = np.stack([z if pr else np.cross(z, p_e - p)
                           for z, p, pr in zip(zs, ps, prisms)], axis=1)
 
-            # adaptive damping: full λ while far (fast-drag safety near
-            # singularities), shrinks with the error so the tight release
-            # solve (1e-5 m) still converges
-            lam = min(DAMPING_M, e_norm)
+            # angular rows: revolute: z_i | prismatic: 0
+            Jo = np.stack([np.zeros(3) if pr else z
+                           for z, pr in zip(zs, prisms)], axis=1)
+            J = np.vstack([J, Jo])
+
+            # adaptive damping
+            lam = min(DAMPING_M, np.linalg.norm(e))
             lam2 = max(lam * lam, 1e-10)
 
             # DLS step: dq = Jᵀ (J Jᵀ + λ² I)⁻¹ e
-            dq = J.T @ np.linalg.solve(J @ J.T + lam2 * I3, e)
+            dq = J.T @ np.linalg.solve(J @ J.T + lam2 * I_task, e)
             if not np.all(np.isfinite(dq)):
                 return None
 
@@ -140,9 +161,8 @@ class NumpyDLSBackend:
 
         # best-effort check after the final update
         T, _, _, _ = self._fk_jac_frames(q)
-        if np.linalg.norm(p_t - T[0:3, 3]) < pos_tol:
-            return [float(v) for v in q]
-        return None
+        _, done = task_err(T)
+        return [float(v) for v in q] if done else None
 
     def jacobian(self, q_rad: List[float]) -> Optional[np.ndarray]:
         T, zs, ps, prisms = self._fk_jac_frames(np.asarray(q_rad, dtype=float))
@@ -156,10 +176,7 @@ class NumpyDLSBackend:
     # ---- internals ----
 
     def _fk_jac_frames(self, q: np.ndarray):
-        """One chain pass: flange 4x4 [m, base-local] plus per-DOF axis
-        directions z_i and origins p_i for the geometric Jacobian.
-        z_i/p_i are sampled after A_i and before Rot(ax_i, q_i) — a
-        rotation moves neither its own axis nor origin."""
+        """One chain pass"""
         T = np.eye(4)
         zs, ps, prisms = [], [], []
         k = 0

@@ -7,7 +7,8 @@ from PySide import QtGui  # type: ignore
 from freecad.Robot_tools.App.rbt_tool import (
     Tool, import_shape, has_valid_shape)
 from freecad.Robot_tools.App.rbt_creator_geom import find_center
-from freecad.Robot_tools.App.rbt_helpers_log import fcl_err
+from freecad.Robot_tools.App.rbt_helpers_log import (
+    fcl_err, fcl_warn)
 from freecad.Robot_tools.Gui.rbt_helpers_ui import (
     is_alive, set_qsb, get_qsb, find_rob
 )
@@ -156,14 +157,14 @@ class DefineTCP:
 
         # tool offset entries
         for b in self.tool_off:
-            b.valueChanged.connect(self._on_tool_off)
+            b.textChanged.connect(self._on_tool_off)
 
         # tcp offset entries
         for b in self.tcp_off:
-            b.valueChanged.connect(self._on_tcp_off)
+            b.textChanged.connect(self._on_tcp_off)
 
         # tool mass entry
-        self.tool_mass.valueChanged.connect(self._on_mass)
+        self.tool_mass.textChanged.connect(self._on_mass)
 
         # tool flange
         self.form.btn_tflange.clicked.connect(self._on_pick_tflange)
@@ -286,7 +287,9 @@ class DefineTCP:
 
 
 def run():
-
+    if Gui.Control.activeDialog():
+        fcl_warn("close the active task panel first")
+        return
     robot = find_rob()
     if robot is None:
         fcl_err("no robot selected or found in curr file")

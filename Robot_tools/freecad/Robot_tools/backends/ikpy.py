@@ -8,6 +8,7 @@ and mirrors the Pinocchio backend's coordinate conventions
 
 from __future__ import annotations
 
+import math
 from typing import List, Optional, TypeAlias
 
 import numpy as np  # type: ignore
@@ -150,14 +151,14 @@ class IkpyBackend:
         target_rot = T_m[0:3, 0:3]
         # target_x = target_rot[:, 0]  # X Axis of target frame
         # target_y = target_rot[:, 1]  # Y Axis of target frame
-        target_z = target_rot[:, 2]  # Z Axis of target frame
+        # target_z = target_rot[:, 2]  # Z Axis of target frame
         q_seed_full = self._expand(q_seed_rad)
 
         try:
             q_sol_full = self._ikc.inverse_kinematics(
                 target_position=target_pos,
-                target_orientation=target_z,
-                orientation_mode=None,  # "all",
+                target_orientation=target_rot,
+                orientation_mode="all",
                 initial_position=q_seed_full,
                 max_iter=max_iter,
             )
@@ -170,11 +171,11 @@ class IkpyBackend:
         achieved = matrix4_to_placement(
             self._ikc.forward_kinematics(q_sol_full)
         )
-        dp = (achieved.Base - target_in_base.Base).Length / MM_PER_M  # meters
-        # for now we just check if the translation is achieved
-        # TODO: extend the check for orientation too
-        # rel = target_in_base.Rotation.inverted().multiply(achieved.Rotation)
-        if dp > pos_tol:  # or abs(rel.Angle) > rot_tol:
+        dp = (achieved.Base - target_in_base.Base).Length / MM_PER_M
+        rel = target_in_base.Rotation.inverted().multiply(achieved.Rotation)
+        ang = abs(rel.Angle)
+        ang = 2 * math.pi - ang if ang > math.pi else ang
+        if dp > pos_tol or ang > rot_tol:
             return None
         return self._collapse(q_sol_full)
 

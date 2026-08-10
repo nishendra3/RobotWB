@@ -72,7 +72,9 @@ class CommandCreateTool:
 
     def IsActive(self):
         doc = App.ActiveDocument
-        return bool(doc) and any(is_robot(o) for o in doc.Objects)
+        return (bool(doc) and
+                not Gui.Control.activeDialog() and
+                any(is_robot(o) for o in doc.Objects))
 
     def Activated(self):
         from freecad.Robot_tools.Gui import taskpanel_rbt_tool

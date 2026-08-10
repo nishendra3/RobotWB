@@ -8,10 +8,11 @@ from typing import List
 import FreeCAD as App  # type: ignore
 
 from freecad.Robot_tools.App.rbt_global_constants import (
-    DEFAULT_TRAJ_SAMPLES, DEFAULT_TRAJ_SPEED, TRAJ_JSON_VERSION)
+    DEFAULT_TRAJ_SAMPLES, DEFAULT_LIN_SPEED_TCP, TRAJ_JSON_VERSION,
+    DEFAULT_PTP_SPEED)
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_warn
 from freecad.Robot_tools.App.rbt_traj_types import (
-    BY_DURATION, BY_SPEED, TimingRequest, Waypoint, DocObj)
+    SpeedSettings, Waypoint, DocObj)
 
 TRAJ_SCHEMA = [
     ("Robot", "App::PropertyLinkGlobal", "Trajectory",
@@ -23,15 +24,14 @@ TRAJ_SCHEMA = [
     ("Waypoint_count", "App::PropertyInteger", "Trajectory",
      "(read only) number of waypoints"),
 
-    ("Travel_mode", "App::PropertyEnumeration", "Timing",
-     "Speed: percent for joint motion, mm/sec for linear | "
-     "Duration: hit a given fixed time, speeds solved"),
+    ("Lin_speed_default", "App::PropertyFloat", "Timing",
+     "default LIN TCP speed (mm/s)"),
 
-    ("Speed", "App::PropertyFloat", "Timing",
-     "Speed mode: % of full joint speed (ptp) | tcp mm/s (lin)"),
+    ("Ptp_speed_default", "App::PropertyFloat", "Timing",
+     "default PTP speed (% of maximum possible robot speed)"),
 
-    ("Target_duration", "App::PropertyFloat", "Timing",
-     "Duration mode: wanted total run time, seconds"),
+    ("Speed_override", "App::PropertyFloat", "Timing",
+     "global speed scaling 1-100 %"),
 
     ("Preview_samples", "App::PropertyInteger", "Display",
      "Path preview samples per segment between two taught points"),
@@ -39,19 +39,29 @@ TRAJ_SCHEMA = [
 
 SCHEMA_PROPS = {n for n, *_ in TRAJ_SCHEMA}
 
-TRAVEL_MODES = ["Speed", "Duration"]
-
 EMPTY_JSON = json.dumps({"version": TRAJ_JSON_VERSION, "waypoints": []})
+
+LIM_EPS = 1e-6
+
+CLAMPS = {
+    "Ptp_speed_default": (0.0, 100.0),
+    "Lin_speed_default": (LIM_EPS, float("inf")),
+    "Speed_override": (1.0, 100.0),
+}
 
 
 class Trajectory:
     def __init__(self, obj):
         self.add_properties(obj)
         obj.Proxy = self
-        obj.Speed = DEFAULT_TRAJ_SPEED
         obj.Preview_samples = DEFAULT_TRAJ_SAMPLES
         obj.Waypoints_json = EMPTY_JSON
         self.set_editor_modes(obj)
+
+        obj.Ptp_speed_default = DEFAULT_PTP_SPEED
+        obj.Lin_speed_default = DEFAULT_LIN_SPEED_TCP
+
+        obj.Speed_override = 100
 
     def add_properties(self, obj):
         """
@@ -62,10 +72,6 @@ class Trajectory:
             if name in obj.PropertiesList:
                 continue
             obj.addProperty(ptype, name, group, doc)
-
-            if name == "Travel_mode":
-                # enum for the dropdown list creation
-                obj.Travel_mode = TRAVEL_MODES
 
     def set_editor_modes(self, fp):
         """
@@ -101,12 +107,12 @@ class Trajectory:
             if fp.Waypoint_count != n:
                 fp.Waypoint_count = n
 
-        elif prop == "Speed" and fp.Travel_mode == "Speed":
-            # clamp PTP speed to 0 - 100 %
-            # TODO: update this when we add LIN motion
-            clamped = min(max(fp.Speed, 0), 100)
-            if fp.Speed != clamped:
-                fp.Speed = clamped
+        elif prop in CLAMPS:
+            low, high = CLAMPS[prop]
+            val = getattr(fp, prop)
+            clamped = min(max(val, low), high)
+            if val != clamped:
+                setattr(fp, prop, clamped)
 
         if prop in SCHEMA_PROPS:
             self.plan_cache = None
@@ -115,19 +121,14 @@ class Trajectory:
         pass
 
 
-def load_timing(traj_obj) -> TimingRequest:
+def load_speed_settings(traj_obj) -> SpeedSettings:
     """
     in: trajectory fpo
-    out: TimingRequest from Travel_mode
+    out: SpeedSettings
     """
-    if traj_obj.Travel_mode == "Duration":
-        mode = BY_DURATION
-        t = traj_obj.Target_duration
-    else:
-        mode = BY_SPEED
-        t = 0
-
-    return TimingRequest(mode, traj_obj.Speed, t)
+    return SpeedSettings(traj_obj.Lin_speed_default,
+                         traj_obj.Ptp_speed_default,
+                         traj_obj.Speed_override)
 
 
 def is_trajectory(obj) -> bool:
@@ -136,7 +137,7 @@ def is_trajectory(obj) -> bool:
     out: True if it has the traj schema
     """
     props = getattr(obj, "PropertiesList", [])
-    return "Waypoints_json" in props and "Travel_mode" in props
+    return "Waypoints_json" in props and "Ptp_speed_default" in props
 
 
 def load_waypoints(traj_obj) -> List[Waypoint]:

@@ -46,11 +46,12 @@ class KinematicsBackend(Protocol):
            target: Placement,
            q_seed_rad: List[float],
            pos_tol: float = 1e-4,  # unit: meters
-           rot_tol: float = 1e-3,  # unit: radians
+           rot_tol: Optional[float] = 1e-3,  # unit: radians
            max_iter: int = 50,) -> Optional[List[float]]:
         """
             success: returns q in rad
             failure to converge: returns none
+            when no rot_tol is provided, we solve with unconstrained pose
         """
         pass
 

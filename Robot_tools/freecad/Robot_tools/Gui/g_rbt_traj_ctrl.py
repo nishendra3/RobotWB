@@ -10,10 +10,9 @@ from contextlib import contextmanager
 import FreeCAD as App  # type: ignore
 
 from freecad.Robot_tools.App import rbt_kine, rbt_traj, rbt_traj_plan
-from freecad.Robot_tools.App.rbt_placement import p_asm_in_world
 from freecad.Robot_tools.App.rbt_traj_types import (
-    CARTESIAN, DocObj, JOINT, Placement, TargetMode,
-    TimingReport, TimingRequest, V3, Waypoint, new_uid)
+    CARTESIAN, DocObj, JOINT, Placement, TargetMode, MotionType,
+    V3, Waypoint, new_uid)
 
 
 class TrajectoryController:
@@ -60,19 +59,20 @@ class TrajectoryController:
             doc.abortTransaction()
             raise
 
-    def add_wp_at_pose(self, tcp_in_asm: Placement,
+    def add_wp_at_pose(self, tcp_in_world: Placement,
                        name: str = "") -> Optional[Waypoint]:
         """
         Add catesian wp at the given pose
         in: tcp pose in asm coords, optional label
         out: appended waypoint, None when ik fails to find robot joints
         """
-        q = rbt_kine.ik_tcp_in_asm(self.robot, tcp_in_asm)
+        q = rbt_kine.ik_tcp_in_world(self.robot,
+                                     tcp_in_world)
         if q is None:
             return None
         wps = self.wps
         wp = Waypoint(new_uid(), name or self.next_name(wps),
-                      CARTESIAN, q, tcp_in_asm)
+                      CARTESIAN, q, tcp_in_world)
         wps.append(wp)
         self.commit("Add waypoint", wps)
         return wp
@@ -84,7 +84,7 @@ class TrajectoryController:
         out: the appended waypoint
         """
         q = rbt_kine.curr_joint_vals_doc(self.robot)
-        pose = rbt_kine.fk_tcp_in_asm(self.robot, q) or App.Placement()
+        pose = rbt_kine.fk_tcp_in_world(self.robot, q) or App.Placement()
         wps = self.wps
         wp = Waypoint(new_uid(), name or self.next_name(wps),
                       JOINT, q, pose)
@@ -98,9 +98,9 @@ class TrajectoryController:
         """
         with self.edit_wps("Update waypoint") as wps:
             q = rbt_kine.curr_joint_vals_doc(self.robot)
-            pose = rbt_kine.fk_tcp_in_asm(self.robot, q) or App.Placement()
+            pose = rbt_kine.fk_tcp_in_world(self.robot, q) or App.Placement()
             wps[i].q_doc = q
-            wps[i].tcp_in_asm = pose
+            wps[i].tcp_in_world = pose
 
     @contextmanager
     def edit_wps(self, undo_label: str) -> Iterator[List[Waypoint]]:
@@ -115,6 +115,20 @@ class TrajectoryController:
     def set_wp_mode(self, i: int, mode: TargetMode) -> None:
         with self.edit_wps("Change waypoint mode") as wps:
             wps[i].mode = mode
+
+    def set_wp_motion(self, i: int, motion: MotionType) -> None:
+        with self.edit_wps("Change waypoint motion") as wps:
+            wps[i].motion = motion
+
+    def set_wp_pace(self, i: int, value: Optional[float],
+                    by_duration: bool) -> None:
+        """
+        set the pace (speed or duration) to reach the point
+        by_duration -> time (seconds) else -> speed value (mm/s or %)
+        """
+        with self.edit_wps("Change waypoint pace") as wps:
+            wps[i].speed = None if by_duration else value
+            wps[i].duration = value if by_duration else None
 
     def move_wp(self, i: int, delta: int) -> None:
         """
@@ -145,25 +159,6 @@ class TrajectoryController:
         rbt_kine.resolve_offsets(self.robot, solved.q_doc)
         return True
 
-    # ---------- timing ----------
-
-    def set_timing(self, timing: TimingRequest) -> TimingReport:
-        """
-        write the timing properties
-        in: timing request
-        out: TimingReport
-        """
-        traj = self.traj
-        traj.Travel_mode = ("Duration" if timing.mode == "duration"
-                            else "Speed")
-        traj.Speed = timing.speed
-        traj.Target_duration = timing.duration
-
-        plan, _, _ = rbt_traj_plan.get_plan(self.traj)
-        if plan is None:   # <2 waypoints or unsolvable -> nothing to time
-            return TimingReport(duration=0.0, speed=timing.speed)
-        return plan.timing
-
     # ---------- helpers ----------
 
     def next_name(self, wps: List[Waypoint]) -> str:
@@ -183,6 +178,22 @@ class TrajectoryController:
         out: tcp pose in asm coords
         """
         q = rbt_kine.curr_joint_vals_doc(self.robot)
-        tcp = rbt_kine.fk_tcp_in_asm(self.robot, q) or App.Placement()
-        pos_asm = p_asm_in_world(self.robot).inverse().multVec(point_world)
-        return App.Placement(pos_asm, tcp.Rotation)
+        tcp_in_world = (rbt_kine.fk_tcp_in_world(self.robot, q) or
+                        App.Placement())
+        return App.Placement(point_world, tcp_in_world.Rotation)
+
+    def set_prop(self, prop: str, value: float) -> None:
+        """
+        write trajectory property with an undo transaction
+        """
+        if getattr(self.traj, prop) == value:
+            return
+
+        undo_name = "changed " + prop
+
+        doc = self.traj.Document
+        doc.openTransaction(undo_name)
+        try:
+            setattr(self.traj, prop, value)
+        finally:
+            doc.commitTransaction()

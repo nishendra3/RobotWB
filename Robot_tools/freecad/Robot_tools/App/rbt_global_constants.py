@@ -34,8 +34,19 @@ DEFAULT_SLIDER_TRAVEL_MM = 500
 
 # trajectory feature
 TRAJ_JSON_VERSION = 1        # Waypoints_json schema version
-DEFAULT_TRAJ_SPEED = 50.0    # % of full joint speed (ptp)
 DEFAULT_TRAJ_SAMPLES = 24    # path preview samples per segment
+
+DEFAULT_PTP_SPEED = 100.0    # % of full joint speed (ptp)
+DEFAULT_LIN_SPEED_TCP = 100  # mm/s
+DEFAULT_LIN_SPEED_ORI = 45   # deg/s (for reorientation of the tool)
+
+LIN_IK_STEP_MM = 5  # solve at every 5 mm steps for linear path
+LIN_IK_STEP_DEG = 5  # solve at every 5 deg tool reorientation
+
+LIN_IK_STEPS_MAX = 100  # per-segment cap on the ik steps solved
+
+LIN_JOINT_JUMP_DEG = 30  # max joint jump allowed to avoid config flip
+LIN_JOINT_JUMP_MM = 30  # max linear motion allowed to avoid config flip
 
 TRAJ_TICK_MS = 33  # update trajectroy frame every 33 millisec.
 

@@ -20,7 +20,8 @@ from freecad.Robot_tools.App.rbt_kine_chain import (
 from freecad.Robot_tools.App.rbt_helpers_math import deg_to_rad
 from freecad.Robot_tools.backends import load_kinematics_lib
 from freecad.Robot_tools.backends.base import KinematicsBackend
-from freecad.Robot_tools.App.rbt_placement import p_asm_in_world
+from freecad.Robot_tools.App.rbt_placement import (
+    p_asm_in_world, p_asm_to_world)
 from freecad.Robot_tools.App.rbt_global_constants import (
     DEFAULT_KIN_LIB, PIP_HINTS, DEFAULT_MAX_SPEEDS)
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_err, fcl_warn
@@ -334,9 +335,9 @@ def expand_chain(dof_vals, mask, fill):
     return [next(it) if m else f for m, f in zip(mask, fill)]
 
 
-def fk_tcp_in_asm(rbt_obj, q_doc: List[float]) -> Optional[Placement]:
+def _fk_tcp_in_asm(rbt_obj, q_doc: List[float]) -> Optional[Placement]:
     """
-    FK to the TCP without touching the document
+    FK to the TCP in asm coords (RCS)
     in: robot fpo, joint values in doc units
     out: tcp placement in robot-asm coords / None
     """
@@ -363,38 +364,15 @@ def fk_tcp_in_asm(rbt_obj, q_doc: List[float]) -> Optional[Placement]:
     return F.multiply(chain.flange_local)
 
 
-def fk(
-        rbt_obj: "App.DocumentObject",
-        q_deg: Optional[List[float]] = None
-        ) -> Optional[Placement]:
+def fk_tcp_in_world(rbt_obj, q_doc: List[float]) -> Optional[Placement]:
     """
-        Runs a fwd kinematics pass on current joint angles
-        and returns the placement of the TCP.
-        Input:
-            rbt_obj: Robot FC Object
-            q_deg  : Current robot joint angles
+    FK to the TCP in world coords
     """
-    be = get_backend(rbt_obj)
-    if be is None:
-        return None
-    if q_deg is None:
-        q_deg = curr_joint_vals_doc(rbt_obj)
-
-    mask = dof_mask(rbt_obj)
-    types = dof_types(rbt_obj)
-    c_chain = compress_chain(q_deg, mask)
-    q_si: List[float] = [q_doc_to_si(t, v)
-                         for t, v in
-                         zip(types, c_chain)]
-    try:
-        # return fk in world-frame
-        return p_asm_in_world(rbt_obj).multiply(be.fk(q_si))
-    except Exception as e:
-        fcl_err(f"FK failed: {e}")
-        return None
+    plc_asm = _fk_tcp_in_asm(rbt_obj, q_doc)
+    return None if plc_asm is None else p_asm_to_world(rbt_obj, plc_asm)
 
 
-def ik_tcp_in_asm(
+def _ik_tcp_in_asm(
         rbt_obj: "App.DocumentObject",
         target_in_asm: Placement,
         q_seed_deg: Optional[List[float]] = None,
@@ -445,7 +423,7 @@ def ik_tcp_in_asm(
     return q_deg
 
 
-def ik(
+def ik_tcp_in_world(
         rbt_obj: "App.DocumentObject",
         target_in_world: Placement,
         q_seed_deg: Optional[List[float]] = None,
@@ -464,8 +442,8 @@ def ik(
     """
     target_in_asm = (p_asm_in_world(rbt_obj)
                      .inverse().multiply(target_in_world))
-    return ik_tcp_in_asm(rbt_obj, target_in_asm, q_seed_deg,
-                         pos_tol_mm, rot_tol_deg)
+    return _ik_tcp_in_asm(rbt_obj, target_in_asm, q_seed_deg,
+                          pos_tol_mm, rot_tol_deg)
 
 
 class CachePruner:

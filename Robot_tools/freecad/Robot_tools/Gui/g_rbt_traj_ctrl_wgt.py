@@ -13,8 +13,7 @@ from PySide.QtWidgets import QWidget  # type: ignore
 
 from freecad.Robot_tools.App import rbt_traj
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_warn
-from freecad.Robot_tools.App.rbt_traj_types import (
-    BY_DURATION, BY_SPEED, TargetMode, TimingRequest, DocObj)
+from freecad.Robot_tools.App.rbt_traj_types import DocObj
 from freecad.Robot_tools.Gui.g_rbt_traj_ctrl import TrajectoryController
 from freecad.Robot_tools.Gui.g_rbt_traj_wp_table import WaypointTable
 from freecad.Robot_tools.Gui.g_rbt_traj_player import (
@@ -35,7 +34,7 @@ class TrajectoryControlWidget(QWidget):
         "btn_teach", "btn_pick", "btn_xyz", "grp_xyz", "btn_xyz_add",
         "qsb_x", "qsb_y", "qsb_z", "qsb_yaw", "qsb_pitch", "qsb_roll",
         "btn_up", "btn_down", "btn_del", "btn_goto", "btn_update",
-        "rb_speed", "rb_dur", "dsb_speed", "dsb_dur", "btn_floor",
+        "dsb_ptp_speed", "dsb_lin_speed", "dsb_override",
         "btn_play", "btn_stop", "sl_time", "lbl_time",
         "sl_scale", "chk_loop",
     )
@@ -44,15 +43,22 @@ class TrajectoryControlWidget(QWidget):
         super().__init__()
         self.ctrl = TrajectoryController(traj_obj)
         self.observer: Optional[TrajPickObserver] = None
-        self.min_duration = 0.0   # exact float behind btn_floor
 
         self.ui = load_panel_ui("taskpanel_rbt_traj.ui")
         self.play_ui = load_panel_ui("tp_rbt_traj_playback.ui")
         getObjByName(self.ui, "lay_play").addWidget(self.play_ui)
         for name in self.UI_NAMES:
             setattr(self, name, getObjByName(self.ui, name))
-        self.table = WaypointTable(self.tbl_wps,
-                                   self.on_rename_wp, self.on_mode_wp)
+
+        self.speed_boxes = {
+            self.dsb_ptp_speed: "Ptp_speed_default",
+            self.dsb_lin_speed: "Lin_speed_default",
+            self.dsb_override: "Speed_override",
+        }
+
+        self.table = WaypointTable(
+            self.tbl_wps, self.ctrl.rename_wp, self.ctrl.set_wp_mode,
+            self.ctrl.set_wp_motion, self.ctrl.set_wp_pace)
 
         self.playback = PlaybackControls(
                     self.btn_play, self.btn_stop, self.sl_time,
@@ -76,30 +82,28 @@ class TrajectoryControlWidget(QWidget):
         traj = self.ctrl.traj
         self.lbl_robot.setText(f"Robot: {self.ctrl.robot.Label}")
         self.le_name.setText(traj.Label)
-        (self.rb_dur if traj.Travel_mode == "Duration"
-         else self.rb_speed).setChecked(True)
-        self.dsb_speed.setValue(traj.Speed)
-        self.dsb_dur.setValue(traj.Target_duration)
 
     def connect_signals(self) -> None:
         self.le_name.editingFinished.connect(self.on_rename_traj)
         self.tbl_wps.itemSelectionChanged.connect(self.on_row_selected)
 
+        # saving position
         self.btn_teach.clicked.connect(self.on_teach)
         self.btn_pick.toggled.connect(self.on_pick_toggled)
         self.btn_xyz.toggled.connect(self.grp_xyz.setVisible)
         self.btn_xyz_add.clicked.connect(self.on_xyz_add)
 
+        # wp modifiers
         self.btn_up.clicked.connect(lambda: self.on_move(-1))
         self.btn_down.clicked.connect(lambda: self.on_move(+1))
         self.btn_del.clicked.connect(self.on_delete)
         self.btn_goto.clicked.connect(self.on_goto)
         self.btn_update.clicked.connect(self.on_update_wp)
 
-        self.rb_speed.toggled.connect(self.on_timing_edited)
-        self.dsb_speed.editingFinished.connect(self.on_timing_edited)
-        self.dsb_dur.editingFinished.connect(self.on_timing_edited)
-        self.btn_floor.clicked.connect(self.on_apply_floor)
+        # speed boxes
+        for dsb, prop in self.speed_boxes.items():
+            dsb.editingFinished.connect(
+                lambda d=dsb, p=prop: self.ctrl.set_prop(p, d.value()))
 
     # ================= refresh =================
 
@@ -127,31 +131,19 @@ class TrajectoryControlWidget(QWidget):
         rebuild table, timing status and player
         """
         plan, solved = self.ctrl.get_plan()
-        pace_row = (plan.timing.pace_seg + 1
-                    if plan and not plan.timing.feasible else -1)
-        self.table.fill(solved, pace_row)
-        self.refresh_timing(plan)
+        bad_timing = plan is not None and not plan.timing.feasible
+        pace_row = plan.timing.pace_seg + 1 if bad_timing else -1
+        pace_msg = plan.timing.err_msg if bad_timing else ""
+        self.table.fill(solved, pace_row, pace_msg)
+        self.refresh_speeds()
         self.rebuild_player(plan)
 
-    def refresh_timing(self, plan) -> None:
+    def refresh_speeds(self) -> None:
         """
-        status button + value display
+        re-read the user entered values for default speeds & override
         """
-        self.btn_floor.setVisible(plan is not None
-                                  and not plan.timing.feasible)
-        if plan is None:
-            return
-        rep = plan.timing
-        self.min_duration = rep.min_duration
-        if not rep.feasible:
-            self.btn_floor.setText(rep.err_msg)
-        # the inactive spinbox shows the computed value, greyed
-        if self.rb_speed.isChecked():
-            self.dsb_dur.setValue(rep.duration)
-        else:
-            self.dsb_speed.setValue(rep.speed)
-        self.dsb_speed.setEnabled(self.rb_speed.isChecked())
-        self.dsb_dur.setEnabled(self.rb_dur.isChecked())
+        for dsb, prop in self.speed_boxes.items():
+            dsb.setValue(getattr(self.ctrl.traj, prop))
 
     def rebuild_player(self, plan) -> None:
         player = (None if plan is None else
@@ -162,12 +154,6 @@ class TrajectoryControlWidget(QWidget):
 
     def on_rename_traj(self) -> None:
         self.ctrl.traj.Label = self.le_name.text()
-
-    def on_rename_wp(self, row: int, text: str) -> None:
-        self.ctrl.rename_wp(row, text)
-
-    def on_mode_wp(self, row: int, mode: TargetMode) -> None:
-        self.ctrl.set_wp_mode(row, mode)
 
     def on_row_selected(self) -> None:
         row = self.table.sel_row()
@@ -223,24 +209,6 @@ class TrajectoryControlWidget(QWidget):
         row = self.table.sel_row()
         if row >= 0:
             self.ctrl.update_wp(row)
-
-    # ================= timing =================
-
-    def on_timing_edited(self, *_args) -> None:
-        if self.rb_dur.isChecked():
-            req = TimingRequest(BY_DURATION, self.dsb_speed.value(),
-                                self.dsb_dur.value())
-        else:
-            req = TimingRequest(BY_SPEED, self.dsb_speed.value())
-        self.ctrl.set_timing(req)
-
-    def on_apply_floor(self) -> None:
-        """
-        apply the exact float floor (display is rounded)
-        """
-        self.dsb_dur.setValue(self.min_duration)
-        self.ctrl.set_timing(TimingRequest(
-            BY_DURATION, self.dsb_speed.value(), self.min_duration))
 
     # ================= teardown =================
 

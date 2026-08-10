@@ -48,3 +48,22 @@ def rad_to_deg(d: Number) -> float:
         converts rad to deg
     """
     return float(d) * DEG_PER_RAD
+
+
+def lerp_plc(plc_from, plc_to, s):
+    """
+    straight line base linear interpolation for placement
+    in: start placemnet, target placement, s = factor 0..1
+    out: linear interpolated placement
+    """
+    trans = plc_from.Base + (plc_to.Base - plc_from.Base) * s
+    rot = App.Rotation.slerp(plc_from.Rotation, plc_to.Rotation, s)
+    return App.Placement(trans, rot)
+
+
+def rot_delta_deg(rot_from, rot_to):
+    """
+    shortest arc angle between two rotations
+    """
+    a = abs(rot_from.inverted().multiply(rot_to).Angle)
+    return rad_to_deg(2*math.pi - a if a > math.pi else a)

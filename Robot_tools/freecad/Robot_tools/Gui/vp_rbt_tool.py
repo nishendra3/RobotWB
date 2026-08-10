@@ -7,6 +7,7 @@ import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
 from pivy import coin  # type: ignore
+from freecad.Robot_tools.App.rbt_global_constants import ap_clr
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_err, fcl_msg, fcl_warn
 from freecad.Robot_tools.App.rbt_helpers_frames import jog_rotation
 from freecad.Robot_tools.App.rbt_tool import tool_parent
@@ -25,6 +26,11 @@ MARKER_GRAB_R_MM = 1.5 * MARKER_RADIUS_MM  # Grabale region around TCP
 
 AXIS_UNITS = [(1, 0, 0), (0, 1, 0), (0, 0, 1)]
 AXIS_COLORS = [(1, 0, 0), (0, .8, 0), (.2, .4, 1)]
+
+# TCP drag marker colors
+MARKER_RGB = ap_clr["Orange"][0]      # default
+MARKER_RGB_OK = ap_clr["B_Green"][0]  # dragging, ik ok
+MARKER_RGB_BAD = ap_clr["V_Red"][0]   # ik infeasible
 
 # AXIS DRAGGERS DIMENSIONS
 SHAFT_LEN, SHAFT_R = 30.0, 1.0
@@ -81,7 +87,7 @@ class ViewProviderTool:
         pick.style.setValue(coin.SoPickStyle.BOUNDING_BOX)
 
         self._marker_mat = coin.SoMaterial()
-        self._marker_mat.diffuseColor.setValue(1.0, 0.5, 0.0)
+        self._marker_mat.diffuseColor.setValue(*MARKER_RGB)
 
         sphere = coin.SoSphere()
         sphere.radius.setValue(MARKER_RADIUS_MM)
@@ -302,10 +308,12 @@ class ViewProviderTool:
         if sol is not None:
             # solving_ik flag is reset in _apply_solution()
             # after joint values have been pushed
+            self._set_marker_rgb(MARKER_RGB_OK)
             self._q_seed = sol  # start next ik from curr q
             r = self.robot
             QTimer.singleShot(0, lambda s=sol: self._apply_solution(s, r))
         else:
+            self._set_marker_rgb(MARKER_RGB_BAD)
             self.f_solving_ik = False
 
     def _apply_solution(self, q_deg, robot):
@@ -345,6 +353,7 @@ class ViewProviderTool:
         self.drag_start_tcp = None
         self.robot = None
 
+        self._set_marker_rgb(MARKER_RGB)
         self.refresh_tx(self.Object)
 
     def _on_sphere_click(self, userdata, event_cb):
@@ -356,24 +365,6 @@ class ViewProviderTool:
 
         if (coin.SoMouseButtonEvent
                 .isButtonPressEvent(event, coin.SoMouseButtonEvent.BUTTON1)):
-            # pick = event_cb.getPickedPoint()
-            # if pick is None:
-            #     return
-
-            # # route the click if it is relevant for us
-            # path = pick.getPath()
-
-            # if path.containsNode(self._marker_sep):
-            #     # sphere: free camera-plane drag
-            #     self._active_axis = DragMode.FREE
-
-            # else:
-            #     # axes handlers
-            #     self._active_axis = None
-            #     for i, axis_sep in enumerate(self._axis_sep):
-            #         if path.containsNode(axis_sep):
-            #             self._active_axis = i
-            #             break
 
             self._active_axis = self._pick_gizmo(event_cb)
 
@@ -498,3 +489,6 @@ class ViewProviderTool:
         ) / denom
 
         return axis_origin + axis * axis_param
+
+    def _set_marker_rgb(self, rgb):
+        self._marker_mat.diffuseColor.setValue(*rgb)

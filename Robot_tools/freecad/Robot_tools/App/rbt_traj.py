@@ -117,8 +117,10 @@ class Trajectory:
         if prop in SCHEMA_PROPS:
             self.plan_cache = None
 
-    def execute(self, fp):
-        pass
+    # bypass default freecad methods
+    def execute(self, fp): pass
+    def dumps(self): return None
+    def loads(self, state): return None
 
 
 def load_speed_settings(traj_obj) -> SpeedSettings:

@@ -15,7 +15,7 @@ import FreeCAD as App  # type: ignore
 from freecad.Robot_tools.App import rbt_kine, rbt_traj
 from freecad.Robot_tools.App.rbt_traj_profile import TimeProfile, make_profile
 from freecad.Robot_tools.App.rbt_traj_types import (
-    LIN, PTP, JOINT, CARTESIAN, PathSegment,
+    LIN, JOINT, CARTESIAN, PathSegment,
     SolvedWaypoint, SpeedSettings, PlanTiming, Waypoint, DocObj
 )
 from freecad.Robot_tools.App.rbt_global_constants import (
@@ -141,7 +141,7 @@ def build_plan(rbt_obj: DocObj,
     """
     PTP: base duration = (time at 100% joint speed) / (ptp speed % / 100)
     LIN: base duration = max(
-                (tcp_travel/lin_speed), -> user spec. linear speed 
+                (tcp_travel/lin_speed), -> user spec. linear speed
                 (rot_travel/LIN_ORIENTATION_SPEED), -> limit to tool rot
                 (joint limits), -> time below which joints exceed max limits
                 )
@@ -278,12 +278,11 @@ def make_plan(traj_obj: DocObj) -> PlanResult:
     out: plan | None
     """
     wps = rbt_traj.load_waypoints(traj_obj)
-    if len(wps) < 2:
-        return None, [], "needs 2+ waypoints"
     plan, solved = build_plan(traj_obj.Robot, wps,
                               rbt_traj.load_speed_settings(traj_obj))
     if plan is None:
-        return None, solved, "IK failure"
+        msg = "needs 2+ waypoints" if len(wps) < 2 else "IK failure"
+        return None, solved, msg
     return plan, solved, "" if plan.timing.feasible else plan.timing.err_msg
 
 

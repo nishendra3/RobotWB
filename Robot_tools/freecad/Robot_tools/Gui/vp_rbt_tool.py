@@ -356,24 +356,26 @@ class ViewProviderTool:
 
         if (coin.SoMouseButtonEvent
                 .isButtonPressEvent(event, coin.SoMouseButtonEvent.BUTTON1)):
-            pick = event_cb.getPickedPoint()
-            if pick is None:
-                return
+            # pick = event_cb.getPickedPoint()
+            # if pick is None:
+            #     return
 
-            # route the click if it is relevant for us
-            path = pick.getPath()
+            # # route the click if it is relevant for us
+            # path = pick.getPath()
 
-            if path.containsNode(self._marker_sep):
-                # sphere: free camera-plane drag
-                self._active_axis = DragMode.FREE
+            # if path.containsNode(self._marker_sep):
+            #     # sphere: free camera-plane drag
+            #     self._active_axis = DragMode.FREE
 
-            else:
-                # axes handlers
-                self._active_axis = None
-                for i, axis_sep in enumerate(self._axis_sep):
-                    if path.containsNode(axis_sep):
-                        self._active_axis = i
-                        break
+            # else:
+            #     # axes handlers
+            #     self._active_axis = None
+            #     for i, axis_sep in enumerate(self._axis_sep):
+            #         if path.containsNode(axis_sep):
+            #             self._active_axis = i
+            #             break
+
+            self._active_axis = self._pick_gizmo(event_cb)
 
             # only start dragging when pick is on marker sphere
             if self._active_axis is None:
@@ -389,13 +391,36 @@ class ViewProviderTool:
 
         elif (coin.SoMouseButtonEvent
               .isButtonReleaseEvent(event, coin.SoMouseButtonEvent.BUTTON1)):
+            if not self.f_dragging:
+                return
             event_cb.setHandled()
             self.f_dragging = False
             self._on_drag_finish(userdata, None)
 
+    def _pick_gizmo(self, event_cb):
+        """
+        Scan all hits on the pick ray & select gizmo
+        """
+        rman = (Gui.getDocument(self.Object.Document.Name)
+                .ActiveView.getViewer().getSoRenderManager())
+        rp = coin.SoRayPickAction(rman.getViewportRegion())
+        rp.setPoint(event_cb.getEvent().getPosition())
+        rp.setRadius(8.0)
+        rp.setPickAll(True)
+        rp.apply(rman.getSceneGraph())
+        picks = rp.getPickedPointList()
+        for k in range(picks.getLength()):
+            path = picks[k].getPath()
+            if path.containsNode(self._marker_sep):
+                return DragMode.FREE
+            for i, axis_sep in enumerate(self._axis_sep):
+                if path.containsNode(axis_sep):
+                    return DragMode(i)
+        return None
+
     def _on_sphere_motion(self, userdata, event_cb):
         """
-            Callback for dragging motion over the TCP Sphere
+        Callback for dragging motion over the TCP Sphere
         """
         if not self.f_dragging:
             return

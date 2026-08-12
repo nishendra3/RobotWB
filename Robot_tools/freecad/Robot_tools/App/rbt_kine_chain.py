@@ -14,6 +14,8 @@ from freecad.Robot_tools.App.rbt_kine_types import (
     REVOLUTE, ChainSpec, JointSpec, LinkSpec, joint_type_FC2WB,
     FIXED, PRISMATIC
 )
+from freecad.Robot_tools.App.rbt_kine_joints import (
+    JointCfg, load_cfg_map)
 from freecad.Robot_tools.App.rbt_placement import p_asm_in_world, base_link
 from freecad.Robot_tools.App.rbt_helpers_math import deg_to_rad, rad_to_deg
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_err
@@ -202,14 +204,9 @@ def joint_dirs(robot_obj: "App.DocumentObject") -> List[int]:
     """
     q (angle used by kinematic chains) = dir * yaw (angle stored in fc)
     """
-    joints = list(robot_obj.Robot_joints or [])
-
-    # get the joint dirs and 1 pad if not of same length as num joints
-    dirs = list(getattr(robot_obj, "Robot_joints_dir", [])
-                or [])[:len(joints)]
-    dirs += [1] * (len(joints) - len(dirs))
-
-    return [-1 if d < 0 else 1 for d in dirs]
+    m = load_cfg_map(robot_obj)
+    return [-1 if m.get(j.Name, JointCfg()).dir < 0 else 1
+            for j in (robot_obj.Robot_joints or [])]
 
 
 def joint_zeros(robot_obj: "App.DocumentObject") -> List[float]:
@@ -217,13 +214,9 @@ def joint_zeros(robot_obj: "App.DocumentObject") -> List[float]:
     Return the Offset2 values
     corresponding to q = 0 for each joint
     """
-    n = len(robot_obj.Robot_joints or ())
-    zeros = list(getattr(robot_obj, "Robot_zero_pose", ())[:n])
-
-    if len(zeros) < n:
-        zeros.extend([0.0] * (n - len(zeros)))
-
-    return [float(z) for z in zeros]
+    m = load_cfg_map(robot_obj)
+    return [float(m.get(j.Name, JointCfg()).zero)
+            for j in (robot_obj.Robot_joints or [])]
 
 
 def joint_limits_doc(j: "App.DocumentObject") -> tuple:

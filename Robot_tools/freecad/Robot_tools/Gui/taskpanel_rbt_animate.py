@@ -41,6 +41,7 @@ from freecad.Robot_tools.App.rbt_kine_types import (
     PRISMATIC, REVOLUTE, FIXED, joint_type_FC2WB)
 from freecad.Robot_tools.App.rbt_helpers_log import (
     fcl_err, fcl_msg, fcl_warn)
+from freecad.Robot_tools.App.rbt_kine_joints import set_joint_cfg
 
 V3 = App.Vector
 Rotation = App.Rotation
@@ -503,11 +504,10 @@ class RobotControlWidget(QWidget):
     def _on_flip(self, j_idx, checked):
         with self.writing():
             self.ctrl.commit_joints()
-        dirs = joint_dirs(self.robot)
-        dirs[j_idx] = -1 if checked else 1
 
-        # invalidate & trigger recreation of kin chain
-        self.robot.Robot_joints_dir = dirs
+        # cfg write -> onChanged invalidates the kin chain
+        set_joint_cfg(self.robot, self.robot.Robot_joints[j_idx],
+                      dir=-1 if checked else 1)
 
         self.ctrl.sync_joints_from_doc()
         self.refresh_row_limits(j_idx)
@@ -649,7 +649,7 @@ def run(robot=None):
         # current user selected robot fpo
         robot = sel[0]
 
-    if not hasattr(robot, "Robot_home_pos"):
+    if not is_robot(robot):
         msg_box(Gui.getMainWindow(), "Robot", fnt,
                 "<b>Robot Missing Properties</b>"
                 "<br><br>"

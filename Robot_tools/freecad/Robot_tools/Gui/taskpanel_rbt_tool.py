@@ -5,35 +5,13 @@ import FreeCADGui as Gui  # type: ignore
 from PySide import QtGui  # type: ignore
 
 from freecad.Robot_tools.App.rbt_tool import (
-    Tool, import_shape, has_valid_shape)
+    create_tool, import_shape, has_valid_shape)
 from freecad.Robot_tools.App.rbt_creator_geom import find_center
 from freecad.Robot_tools.App.rbt_helpers_log import (
     fcl_err, fcl_warn)
 from freecad.Robot_tools.Gui.rbt_helpers_ui import (
     is_alive, set_qsb, get_qsb, find_rob
 )
-
-
-# helpers
-def create_default_tool(robot, name="Default_Tool"):
-    """
-    Creates a tool with no geom and identity offsets
-    """
-    from freecad.Robot_tools.Gui.vp_rbt_tool import ViewProviderTool
-
-    doc = robot.Document
-    tool_fpo = doc.addObject("App::FeaturePython", name)
-    Tool(tool_fpo)
-    ViewProviderTool(tool_fpo.ViewObject)
-    if robot.Robot_joints:
-        tool_fpo.Flange_link = (robot.Robot_joints[-1].Reference2
-                                if robot.Robot_joints else None)
-    tool_fpo.Tool_offset = App.Placement()
-    tool_fpo.TCP_offset = App.Placement()
-    tool_fpo.Tool_mass = 0.0
-    robot.Tools = list(robot.Tools) + [tool_fpo]
-    robot.Active_tool = tool_fpo
-    return tool_fpo
 
 
 class DefineTCP:
@@ -49,7 +27,7 @@ class DefineTCP:
         self.doc.openTransaction("Edit Tool"
                                  if self.inEdit else "Create Tool")
         try:
-            self.tool = tool if self.inEdit else create_default_tool(robot)
+            self.tool = tool if self.inEdit else create_tool(robot)
             self.form = self.cm_form()
             self.load()
             self.connect()

@@ -5,12 +5,15 @@ Create a new robot from FreeCAD parts
 import FreeCAD as App  # type: ignore
 import UtilsAssembly   # type: ignore
 
-
+from freecad.Robot_tools.App import rbt_kine
 from freecad.Robot_tools.App.rbt_robot import Robot, all_robots
 from freecad.Robot_tools.App.rbt_creator_geom import add_base_frame
 from freecad.Robot_tools.App.rbt_creator_asm import (
     create_assembly, add_asm_object, resolve_asm_ref,
     find_assemblies)
+from freecad.Robot_tools.App.rbt_kine_joints import (
+    set_joint_cfg, drop_joint_cfg
+)
 from freecad.Robot_tools.App.rbt_creator_jnt import add_joint
 from freecad.Robot_tools.App.rbt_global_constants import (
     ROBOT_FPO_NAME, BASE_FRAME_NAME, RBT_PREFS,
@@ -18,6 +21,8 @@ from freecad.Robot_tools.App.rbt_global_constants import (
 from freecad.Robot_tools.App.rbt_placement import (
     is_grounded_datum, chain_root, find_grounded_joint)
 from freecad.Robot_tools.App.rbt_kine_chain import joint_value_doc
+from freecad.Robot_tools.App.rbt_errors import RbtDocError
+from freecad.Robot_tools.App.rbt_placement import pull_base_placement
 
 
 class RobotCreator:
@@ -152,10 +157,9 @@ class RobotCreator:
         in the assembly & registers them with FPO
         """
         j = add_joint(self.assembly, jtype, refs, label)
-        self.fpo.Robot_zero_pose = (list(self.fpo.Robot_zero_pose)
-                                    + [joint_value_doc(j, 1)])
         self.fpo.Robot_joints = list(self.fpo.Robot_joints) + [j]
-        self.fpo.Robot_joints_dir = list(self.fpo.Robot_joints_dir) + [1]
+        v = joint_value_doc(j, 1)
+        set_joint_cfg(self.fpo, j, zero=v, home=v)
         return j
 
     def next_joint_index(self):
@@ -173,7 +177,6 @@ class RobotCreator:
         if self.fpo is not None:
             # invalidate and recreate kinematic chain
             # incase the joint dir is flipped
-            from freecad.Robot_tools.App import rbt_kine
             rbt_kine.invalidate(self.fpo)
 
     def delete_joint(self, obj):
@@ -182,20 +185,9 @@ class RobotCreator:
 
         if self.fpo and obj in self.fpo.Robot_joints:
             joints = list(self.fpo.Robot_joints)
-            dirs = list(self.fpo.Robot_joints_dir)
-
-            idx = joints.index(obj)
-            joints.pop(idx)
-            if idx < len(dirs):
-                dirs.pop(idx)
-
+            joints.remove(obj)
             self.fpo.Robot_joints = joints
-            self.fpo.Robot_joints_dir = dirs
-
-            zeros = list(self.fpo.Robot_zero_pose)
-            if idx < len(zeros):
-                zeros.pop(idx)
-                self.fpo.Robot_zero_pose = zeros
+            drop_joint_cfg(self.fpo, obj)
 
         # read frame before the joint deletion
         refs = getattr(obj, "Reference1", None)
@@ -312,3 +304,25 @@ class RobotCreator:
                                                        obj, sub)[0] is not None
             ),
             None)
+
+    def import_parts_file(self, path):
+        """
+        merge a parts .FCStd into the working doc
+        """
+        doc = self.asm_doc or App.ActiveDocument
+        before = {o.Name for o in doc.Objects}
+        doc.mergeProject(path)
+        new = self.track_imported(before)
+        doc.recompute()
+        return [doc.getObject(n) for n in sorted(new)]
+
+    def finalize(self):
+        """
+        validate, seed Base_placement and recompute doc
+        """
+        if not self.is_valid_robot():
+            raise RbtDocError("robot needs a base and >= 1 joint")
+        pull_base_placement(self.fpo)
+        self.asm_doc.recompute()
+        rbt_kine.invalidate(self.fpo)
+        return self.fpo

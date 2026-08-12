@@ -119,6 +119,20 @@ def solve_waypoints(rbt_obj: DocObj,
     return solved
 
 
+def goto_waypoint(traj_obj, wp_idx: int, clamp: bool = False,
+                  preview: bool = False) -> Optional[List[float]]:
+    """
+    move the robot to waypoint wp_idx
+    """
+    wps = rbt_traj.load_waypoints(traj_obj)
+    solved = solve_waypoints(traj_obj.Robot, [wps[wp_idx]])
+    q = solved[0].q_doc if solved else None
+    if q is None:
+        return None
+    return rbt_kine.set_q(traj_obj.Robot, q, clamp=clamp,
+                          preview=preview)
+
+
 def check_joint_lims(rbt_obj, q_doc: List[float]) -> str:
     """
     in: robot fpo, joint values in doc units

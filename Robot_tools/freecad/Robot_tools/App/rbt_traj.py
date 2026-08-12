@@ -7,12 +7,20 @@ from typing import List
 
 import FreeCAD as App  # type: ignore
 
+from freecad.Robot_tools.App import rbt_kine
+from freecad.Robot_tools.App.rbt_kine import (
+    fk_tcp_in_world, ik_tcp_in_world
+)
 from freecad.Robot_tools.App.rbt_global_constants import (
     DEFAULT_TRAJ_SAMPLES, DEFAULT_LIN_SPEED_TCP, TRAJ_JSON_VERSION,
-    DEFAULT_PTP_SPEED)
+    DEFAULT_PTP_SPEED, WB_NAME)
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_warn
 from freecad.Robot_tools.App.rbt_traj_types import (
-    SpeedSettings, Waypoint, DocObj)
+    SpeedSettings, Waypoint, DocObj, PTP,
+    CARTESIAN, JOINT, new_uid)
+
+
+_TYPE_ = f"{WB_NAME}::Trajectory"
 
 TRAJ_SCHEMA = [
     ("Robot", "App::PropertyLinkGlobal", "Trajectory",
@@ -52,6 +60,7 @@ CLAMPS = {
 
 class Trajectory:
     def __init__(self, obj):
+        self.Type = _TYPE_
         self.add_properties(obj)
         obj.Proxy = self
         obj.Preview_samples = DEFAULT_TRAJ_SAMPLES
@@ -68,6 +77,7 @@ class Trajectory:
         add missing properties to the objects
         helps old documents keep up with new property addition
         """
+        self.Type = _TYPE_
         for name, ptype, group, doc in TRAJ_SCHEMA:
             if name in obj.PropertiesList:
                 continue
@@ -138,6 +148,9 @@ def is_trajectory(obj) -> bool:
     in: any fc doc object
     out: True if it has the traj schema
     """
+    proxy = getattr(obj, "Proxy", None)
+    if getattr(proxy, "Type", "") == _TYPE_:
+        return True
     props = getattr(obj, "PropertiesList", [])
     return "Waypoints_json" in props and "Ptp_speed_default" in props
 
@@ -164,6 +177,35 @@ def save_waypoints(traj_obj, wps: List[Waypoint]) -> None:
     traj_obj.Waypoints_json = json.dumps({
         "version": TRAJ_JSON_VERSION,
         "waypoints": [wp.to_dict() for wp in wps]})
+
+
+def teach_waypoint(traj_obj, name: str = "", motion=PTP) -> Waypoint:
+    """
+    append a JOINT waypoint at the robot's current pose
+    """
+    rob = traj_obj.Robot
+    wps = load_waypoints(traj_obj)
+    tcp = fk_tcp_in_world(rob) or App.Placement()
+    wp = Waypoint(new_uid(), name or f"P{len(wps) + 1}", JOINT,
+                  rbt_kine.curr_joint_vals_doc(rob), tcp, motion)
+    save_waypoints(traj_obj, wps + [wp])
+    return wp
+
+
+def add_cartesian_waypoint(traj_obj, target, name: str = "",
+                           motion=PTP):
+    """
+    CARTESIAN waypoint at target
+    None when unreachable
+    """
+    q = ik_tcp_in_world(traj_obj.Robot, target)
+    if q is None:
+        return None
+    wps = load_waypoints(traj_obj)
+    wp = Waypoint(new_uid(), name or f"P{len(wps) + 1}", CARTESIAN,
+                  q, target, motion)
+    save_waypoints(traj_obj, wps + [wp])
+    return wp
 
 
 def rbt_trajectories(rbt_obj) -> List:

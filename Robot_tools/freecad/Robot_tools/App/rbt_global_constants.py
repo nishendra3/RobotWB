@@ -10,6 +10,7 @@ Licence: LGPL 2.1
 # TODO: Check the case where user decides
 # to rename the robot default names from
 # below constants
+WB_NAME = "Robot_tools"
 ROBOT_FPO_NAME = "Robot_FPO"
 ROBOT_ASSEMBLY_LABEL = "Robot_Assembly"
 GROUNDED_JOINT_NAME = "GroundedJoint"   # REMOVE: Legacy Path

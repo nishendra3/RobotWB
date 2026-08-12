@@ -5,9 +5,9 @@ kinematics module for robot wb
 
 from __future__ import annotations
 
-import traceback
+from dataclasses import dataclass, replace
 from contextlib import contextmanager
-from typing import Dict, List, Optional, Tuple, TypeAlias
+from typing import List, Optional, TypeAlias
 
 import FreeCAD as App  # type: ignore
 
@@ -17,6 +17,8 @@ from freecad.Robot_tools.App.rbt_kine_chain import (
     extract_chain, joint_dirs, joint_limits_doc,
     joint_value_doc, q_doc_to_si, q_si_to_doc,
     joint_zeros)
+from freecad.Robot_tools.App.rbt_kine_joints import (
+    JointCfg, load_cfg_map, save_cfg_map)
 from freecad.Robot_tools.App.rbt_helpers_math import deg_to_rad
 from freecad.Robot_tools.backends import load_kinematics_lib
 from freecad.Robot_tools.backends.base import KinematicsBackend
@@ -25,16 +27,32 @@ from freecad.Robot_tools.App.rbt_placement import (
 from freecad.Robot_tools.App.rbt_global_constants import (
     DEFAULT_KIN_LIB, PIP_HINTS, DEFAULT_MAX_SPEEDS)
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_err, fcl_warn
+from freecad.Robot_tools.App.rbt_errors import RbtInputError
 
 Placement: TypeAlias = App.Placement
 Chain: TypeAlias = ChainSpec
 
-# backend instance : (doc.Name, robot.Name, backend library)
-cache: Dict[Tuple[str, str, str], KinematicsBackend] = {}
-c_pruner = None
 
-# chain cache
-chain_cache: Dict[Tuple[str, str], Chain] = {}
+@dataclass
+class KinState:
+    """
+    kinematics state to store on the robot object proxy
+    """
+    lib: Optional[str] = None
+    backend: Optional[KinematicsBackend] = None
+    chain: Optional[Chain] = None
+
+
+def get_kin_state(rbt_obj) -> KinState:
+    """
+    create new or return existing kinematic state
+    """
+    proxy = rbt_obj.Proxy
+    ks = getattr(proxy, "kin", None)
+    if ks is None:
+        ks = KinState()
+        proxy.kin = ks
+    return ks
 
 
 def recompute_asm(rbt_obj: "App.DocumentObject") -> None:
@@ -68,27 +86,37 @@ def backend_name(rbt_obj: "App.DocumentObject") -> str:
     return getattr(rbt_obj, "Kinematics_lib", DEFAULT_KIN_LIB)
 
 
+def load_backend(lib_name: str, chain: Chain) -> Optional[KinematicsBackend]:
+    """
+    load and init a kinematics backend
+    """
+    try:
+        lib = load_kinematics_lib(lib_name)
+        be = lib()
+        be.load(chain)
+        return be
+    except ImportError:
+        fcl_warn(f"Kin Lib '{lib_name}' is not installed.\n")
+    except Exception as e:
+        fcl_err(f"Failed to load '{lib_name}': {e}\n")
+        return None
+
+    return None
+
+
 def get_backend(rbt_obj: "App.DocumentObject",
                 ) -> Optional[KinematicsBackend]:
     """
     Returns the current backend selected for robot object.\n
-    If no active B.E exists, it selects one and caches the value.\n
-    Inputs:
-        - rbt_obj: Robot FC Object
+    If no active B.E exists, it selects one and keeps it in the proxy.\n
     """
 
-    # ensure clear cache on earlier doc closures
-    ensure_pruner()
-
-    curr_doc = rbt_obj.Document.Name
+    ks = get_kin_state(rbt_obj)
     name = backend_name(rbt_obj)
-    key: Tuple[str, str] = (curr_doc, rbt_obj.Name, name)
 
-    # return existing from cache
-    if key in cache:
-        return cache[key]
-
-    # if no cached BE exists, init new instance & cache it
+    # return exsiting state
+    if ks.backend is not None and ks.lib == name:
+        return ks.backend
 
     # extract robot kinematic chain after refreshing tcp
     recompute_tool(rbt_obj)
@@ -96,58 +124,45 @@ def get_backend(rbt_obj: "App.DocumentObject",
     if chain is None:
         fcl_err("Cant extract robot kinematics info")
         return None
+    ks.chain = chain
 
-    # create new backend instance
-    def load_lib(lib_name: str):
-        lib = load_kinematics_lib(lib_name)
-        be = lib()
-        be.load(chain)
-        return be
-
-    # create new backend instance
     # try to load user selection, fallback to DEFAULT_KIN_LIB
     libs = [name] if name == DEFAULT_KIN_LIB else [name, DEFAULT_KIN_LIB]
+
     be = None
-    for lib in libs:
-        try:
-            be = load_lib(lib)
+    lib = None
+
+    for candidate in libs:
+        be = load_backend(candidate, chain)
+        if be is not None:
+            lib = candidate
             break
-        except ImportError:
-            fcl_warn(f"Kin Lib '{lib}' is not installed.\n")
-        except Exception as e:
-            fcl_err(f"Failed to load '{lib}': {e}\n")
-            return None
 
     if be is None:
         fcl_err("No kinematics backend available.\n")
         return None
 
-    # update the UI if we used fallback
+    # Update UI on change of lib
     if lib != name:
-        _ph = PIP_HINTS.get(name, f'pip install {name}')
+        pip_hint = PIP_HINTS.get(name, f"pip install {name}")
         fcl_warn(
-            f"Falling back to '{lib}' for this session. To use '{name}', "
-            f"install it ({_ph}) and restart FreeCAD.\n")
+            f"Falling back to '{lib}' for this session. "
+            f"To use '{name}', install it ({pip_hint}) and restart FreeCAD.\n"
+        )
 
-    cache[key] = be
-    chain_cache[key] = chain
+    ks.backend = be
+    ks.lib = name
+
     return be
 
 
 def invalidate(rbt_obj: "App.DocumentObject") -> None:
     """
-        Removes current backend from cache.
-        Inputs:
-            - rbt_obj: Robot FC Object
+        Drops the kinematics state of robot
     """
-    try:
-        curr_doc = rbt_obj.Document.Name
-        name = backend_name(rbt_obj)
-        cache.pop((curr_doc, rbt_obj.Name, name), None)
-        chain_cache.pop((curr_doc, rbt_obj.Name, name), None)
-    except Exception as e:
-        fcl_err(f"Failed to clear kinematics lib from cache: {e}\n")
-        fcl_err(traceback.format_exc())
+    proxy = getattr(rbt_obj, "Proxy", None)
+    if proxy is not None:
+        proxy.kin = None
 
 
 def curr_joint_vals_doc(rbt_obj: "App.DocumentObject") -> List[float]:
@@ -168,6 +183,50 @@ def joint_limits_q_deg(rbt_obj, j_idx: int):
     return low, high
 
 
+def check_q(rbt_obj, q_deg) -> List[float]:
+    """
+    validate length against Robot_joints
+    """
+    n = len(rbt_obj.Robot_joints)
+    if len(q_deg) != n:
+        raise RbtInputError(f"need {n} joint values, got {len(q_deg)}")
+    return [float(v) for v in q_deg]
+
+
+def clamp_q(rbt_obj, q_deg) -> List[float]:
+    """
+    clamp to joint limits [FIXED : (0, 0)]
+    """
+    lims = [joint_limits_q_deg(rbt_obj, i) for i in range(len(q_deg))]
+    return [min(max(v, lo), hi) for v, (lo, hi) in zip(q_deg, lims)]
+
+
+def set_q(rbt_obj, q_deg, clamp=False, preview=False) -> List[float]:
+    """
+    write path for joint values
+    """
+    q = check_q(rbt_obj, q_deg)
+    if clamp:
+        q = clamp_q(rbt_obj, q)
+    if preview:
+        jog_q_deg(rbt_obj, q)
+    else:
+        resolve_offsets(rbt_obj, q)
+    return q
+
+
+def move_to(rbt_obj, target, q_seed=None, clamp=False, preview=False,
+            pos_tol_mm=0.01, rot_tol_deg=0.5) -> Optional[List[float]]:
+    """
+    ik + set_q
+    """
+    q = ik_tcp_in_world(rbt_obj, target, q_seed_deg=q_seed,
+                        pos_tol_mm=pos_tol_mm, rot_tol_deg=rot_tol_deg)
+    if q is None:
+        return None
+    return set_q(rbt_obj, q, clamp=clamp, preview=preview)
+
+
 def jog_q_deg(rbt_obj, q_deg):
     """continuous jog: FK only"""
     apply_joint_angles(rbt_obj, q_deg)
@@ -176,25 +235,26 @@ def jog_q_deg(rbt_obj, q_deg):
         tool.recompute()
 
 
-def raw_pose(rbt_obj) -> List[float]:
-    """
-    current raw Offset2 values (yaw deg | z mm), dir-less
-    """
-    return [joint_value_doc(j, 1) for j in rbt_obj.Robot_joints]
-
-
 def save_home(rbt_obj) -> None:
     """
     save current pose as home position
     """
-    rbt_obj.Robot_home_pos = raw_pose(rbt_obj)
+    m = load_cfg_map(rbt_obj)
+    for j in rbt_obj.Robot_joints:
+        m[j.Name] = replace(m.get(j.Name, JointCfg()),
+                            home=joint_value_doc(j, 1))
+    save_cfg_map(rbt_obj, m)
 
 
 def set_zero_pose(rbt_obj) -> None:
     """
     save current pose as zero (null) reference
     """
-    rbt_obj.Robot_zero_pose = raw_pose(rbt_obj)
+    m = load_cfg_map(rbt_obj)
+    for j in rbt_obj.Robot_joints:
+        m[j.Name] = replace(m.get(j.Name, JointCfg()),
+                            zero=joint_value_doc(j, 1))
+    save_cfg_map(rbt_obj, m)
 
 
 def home_q_deg(rbt_obj) -> List[float]:
@@ -202,22 +262,24 @@ def home_q_deg(rbt_obj) -> List[float]:
     q_home = dir * (stored raw home - zero)
     for unset home pos --> zero pose
     """
-    zeros = joint_zeros(rbt_obj)
-    home = list(rbt_obj.Robot_home_pos or [])
-    home += zeros[len(home):]
-    return [d * (float(y)-z)
-            for d, y, z in zip(joint_dirs(rbt_obj), home, zeros)]
+    m = load_cfg_map(rbt_obj)
+    out = []
+    for j in rbt_obj.Robot_joints:
+        cfg = m.get(j.Name, JointCfg())
+        d = -1 if cfg.dir < 0 else 1
+        out.append(d * (float(cfg.home) - float(cfg.zero)))
+    return out
 
 
 def get_chain(rbt_obj):
     """
     returns the robot kinematic chain
     """
-    curr_doc = rbt_obj.Document.Name
-    key = (curr_doc, rbt_obj.Name, backend_name(rbt_obj))
-    if key not in chain_cache:
-        get_backend(rbt_obj)  # builds & caches
-    return chain_cache.get(key)
+    ks = get_kin_state(rbt_obj)
+    if ks.chain is None:
+        # build the kinematics state & store it
+        get_backend(rbt_obj)
+    return ks.chain
 
 
 def apply_joint_angles(rbt_obj, q_deg):
@@ -229,8 +291,8 @@ def apply_joint_angles(rbt_obj, q_deg):
     if chain is None:
         return
     if len(q_deg) != len(chain.joints):
-        fcl_err("joints lengths does not match with kin chain length")
-        return
+        raise RbtInputError(f"need {len(chain.joints)} joint "
+                            f"values, got {len(q_deg)}")
 
     doc = rbt_obj.Document
     F = App.Placement(chain.base_in_asm)
@@ -364,11 +426,14 @@ def _fk_tcp_in_asm(rbt_obj, q_doc: List[float]) -> Optional[Placement]:
     return F.multiply(chain.flange_local)
 
 
-def fk_tcp_in_world(rbt_obj, q_doc: List[float]) -> Optional[Placement]:
+def fk_tcp_in_world(rbt_obj, q_doc: Optional[List[float]] = None
+                    ) -> Optional[Placement]:
     """
     FK to the TCP in world coords
     """
-    plc_asm = _fk_tcp_in_asm(rbt_obj, q_doc)
+    q = curr_joint_vals_doc(rbt_obj) if q_doc is None \
+        else check_q(rbt_obj, q_doc)
+    plc_asm = _fk_tcp_in_asm(rbt_obj, q)
     return None if plc_asm is None else p_asm_to_world(rbt_obj, plc_asm)
 
 
@@ -444,33 +509,6 @@ def ik_tcp_in_world(
                      .inverse().multiply(target_in_world))
     return _ik_tcp_in_asm(rbt_obj, target_in_asm, q_seed_deg,
                           pos_tol_mm, rot_tol_deg)
-
-
-class CachePruner:
-    """
-    Drops cache entries for deleted robots / closed documents
-    """
-    def slotDeletedDocument(self, doc):
-        purge(lambda k: k[0] == doc.Name)
-
-    def slotDeletedObject(self, obj):
-        doc = getattr(obj, "Document", None)
-        if doc is None:
-            return
-        purge(lambda k: k[0] == doc.Name and k[1] == obj.Name)
-
-
-def purge(match):
-    for d in (cache, chain_cache):
-        for k in [k for k in d if match(k)]:
-            del d[k]
-
-
-def ensure_pruner():
-    global c_pruner
-    if c_pruner is None:
-        c_pruner = CachePruner()
-        App.addDocumentObserver(c_pruner)
 
 
 @contextmanager

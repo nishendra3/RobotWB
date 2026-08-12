@@ -10,12 +10,16 @@ Licence: LGPL 2.1
 import FreeCAD as App  # type: ignore
 
 from freecad.Robot_tools.App.rbt_kine import invalidate
-from freecad.Robot_tools.App.rbt_kine_chain import joint_dirs
-from freecad.Robot_tools.App.rbt_global_constants import DEFAULT_KIN_LIB
+from freecad.Robot_tools.App.rbt_kine_joints import (
+    JointCfg, save_cfg_map)
+from freecad.Robot_tools.App.rbt_global_constants import (
+    DEFAULT_KIN_LIB, WB_NAME)
 from freecad.Robot_tools.App.rbt_placement import (
     ensure_sync_observer, push_base_placement, pull_base_placement)
-
+from freecad.Robot_tools.App.rbt_errors import RbtInputError
 from freecad.Robot_tools.backends import KIN_LIB_NAMES
+
+_TYPE_ = f"{WB_NAME}::Robot"
 
 ROBOT_SCHEMA = [
 
@@ -26,12 +30,8 @@ ROBOT_SCHEMA = [
      "Robot", "Robot joints list"),
     ("Robot_links", "App::PropertyPlacementList",
      "Robot", "Robot links list"),
-    ("Robot_joints_dir", "App::PropertyIntegerList",
-     "Robot", "Joint direction sign (+1/-1) per joint"),
-    ("Robot_home_pos", "App::PropertyFloatList",
-     "Robot", "Home position (revolute: deg, slider: mm)"),
-    ("Robot_zero_pose", "App::PropertyFloatList",
-     "Robot", "Robot pose that is to be taken as null reference"),
+    ("Robot_joints_cfg", "App::PropertyString", "Robot",
+     "per-joint config json: {joint: {dir, zero, home}}"),
 
     # tool handling properties
     ("Tools", "App::PropertyLinkListGlobal",
@@ -51,7 +51,8 @@ ROBOT_SCHEMA = [
      "(moves the frame label, not the robot)"),
 
     # trajectory properties
-    ("Trajectories", "App::PropertyLinkListGlobal", "Trajectory",
+    # hidden scope for "Trajectories" below to prevent dependency loop
+    ("Trajectories", "App::PropertyLinkListHidden", "Trajectory",
      "Trajectories attached to this robot"),
     ("Robot_joints_max_speed", "App::PropertyFloatList", "Kinematics",
      "Full joint speed (=100%), deg/s (revolute) | mm/s (prismatic)"),
@@ -64,7 +65,7 @@ ROBOT_SCHEMA = [
 
 class Robot:
     def __init__(self, obj):
-        '''Add some custom properties to our box feature'''
+        self.Type = _TYPE_
         self.add_properties(obj)
         obj.Kinematics_lib = KIN_LIB_NAMES
         obj.Kinematics_lib = DEFAULT_KIN_LIB
@@ -72,9 +73,26 @@ class Robot:
         ensure_sync_observer()
 
     def add_properties(self, obj):
+        self.Type = _TYPE_
         for name, ptype, group, doc in ROBOT_SCHEMA:
             if not hasattr(obj, name):
                 obj.addProperty(ptype, name, group, doc)
+
+    def add_joint_prop(self, obj):
+        if (hasattr(obj, "Robot_joints_dir")
+                and "Robot_joints_cfg" not in obj.PropertiesList):
+            obj.addProperty("App::PropertyString", "Robot_joints_cfg",
+                            "Robot", "per-joint config")
+            js = list(obj.Robot_joints)
+            dirs = list(obj.Robot_joints_dir) + [1] * len(js)
+            zeros = list(obj.Robot_zero_pose) + [0.0] * len(js)
+            homes = list(obj.Robot_home_pos)
+            homes += zeros[len(homes):]  # unset home falls back to zero
+            save_cfg_map(obj, {j.Name: JointCfg(dirs[i], zeros[i], homes[i])
+                               for i, j in enumerate(js)})
+            for p in ("Robot_joints_dir", "Robot_zero_pose",
+                      "Robot_home_pos"):
+                obj.removeProperty(p)
 
     def onChanged(self, obj, prop):
         '''Do something when a property has changed'''
@@ -91,7 +109,7 @@ class Robot:
             # asm stays, only frame moves
             pull_base_placement(obj)
 
-        if prop in ("Robot_joints", "Robot_joints_dir", "Robot_zero_pose",
+        if prop in ("Robot_joints", "Robot_joints_cfg",
                     "Active_tool", "Kinematics_lib"):
             try:
                 invalidate(obj)
@@ -102,7 +120,6 @@ class Robot:
         # check and repair saved doc when its reopened
         self.add_properties(obj)
         self.check_kin_libs(obj)
-        self.check_joints_direction(obj)
         self.check_default_tool(obj)
 
         # robot placement
@@ -118,14 +135,6 @@ class Robot:
             obj.Kinematics_lib = KIN_LIB_NAMES
             obj.Kinematics_lib = DEFAULT_KIN_LIB
 
-    def check_joints_direction(self, obj):
-        """
-        Check if the rotation direction for joints is set
-        """
-        dirs = joint_dirs(obj)
-        if dirs != list(obj.Robot_joints_dir or []):
-            obj.Robot_joints_dir = dirs
-
     def check_default_tool(self, obj):
         """
         robots restored without a tool get default
@@ -137,15 +146,21 @@ class Robot:
         '''Do something when doing a recomputation, this method is mandatory'''
         pass
 
+    def dumps(self): return None
+    def loads(self, state): return None
 
 # --------------------------------
 #         HELPERS
 # --------------------------------
 
+
 def is_robot(obj) -> bool:
     """
     True if an obj is of type Robot FPO
     """
+    proxy = getattr(obj, "Proxy", None)
+    if getattr(proxy, "Type", "") == _TYPE_:
+        return True
     return (hasattr(obj, "Robot_joints") and
             hasattr(obj, "Robot_assembly"))
 
@@ -158,3 +173,23 @@ def all_robots(doc=None):
     doc = doc or App.ActiveDocument
     return [o for o in doc.Objects
             if is_robot(o)] if doc else []
+
+
+def find_robot(hint=None, doc=None):
+    """
+    find robot fpo by Name/Label, or in a given doc
+    """
+    if hint is not None and not isinstance(hint, str):
+        if not is_robot(hint):
+            raise RbtInputError("not a robot FPO")
+        return hint
+    doc = doc or App.ActiveDocument
+    if doc is None:
+        raise RbtInputError("no active document; pass doc=")
+    robs = all_robots(doc)
+    if hint is not None:
+        robs = [r for r in robs if hint in (r.Name, r.Label)]
+    if len(robs) != 1:
+        raise RbtInputError("robot not found or not unique: "
+                            f"{[r.Label for r in robs]}")
+    return robs[0]

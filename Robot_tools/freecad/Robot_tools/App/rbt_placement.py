@@ -6,6 +6,7 @@ Handles placement of robot model & syncs observer
 import FreeCAD as App  # type: ignore
 import UtilsAssembly  # type: ignore
 
+from freecad.Robot_tools.App.rbt_kine_joints import get_joint_cfg
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_err
 
 PLC_TOL = 1e-6
@@ -76,9 +77,7 @@ def joint_dir(joint):
     for fpo in joint.InList:
         js = getattr(fpo, "Robot_joints", None)
         if js and joint in js:
-            dirs = getattr(fpo, "Robot_joints_dir", ())
-            i = list(js).index(joint)
-            return dirs[i] if i < len(dirs) else 1
+            return get_joint_cfg(fpo, joint).dir
     return 1
 
 

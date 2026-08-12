@@ -5,8 +5,10 @@ import UtilsAssembly   # type: ignore
 
 from freecad.Robot_tools.App.rbt_helpers_frames import (
     JogFrame, apply_jog_frames)
-
+from freecad.Robot_tools.App.rbt_global_constants import WB_NAME
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_err
+
+_TYPE_ = f"{WB_NAME}::Tool"
 
 TOOL_SCHEMA = [
     ("Tool_shape", "App::PropertyLinkGlobal", "Tool",
@@ -43,6 +45,7 @@ TOOL_SCHEMA = [
 
 class Tool:
     def __init__(self, obj):
+        self.Type = _TYPE_
         self.add_properties(obj)
         obj.Proxy = self
 
@@ -133,6 +136,7 @@ class Tool:
         """
         Add properties to older versions of tool
         """
+        self.Type = _TYPE_
         existing = set(fp.PropertiesList)
         for name, typ, group, doc in TOOL_SCHEMA:
             if name not in existing:
@@ -170,6 +174,30 @@ class Tool:
 # --------------------------
 #         helpers
 # --------------------------
+
+
+# helpers
+def create_tool(robot, name="Default_Tool"):
+    """
+    Creates a tool with no geom and identity offsets
+    """
+    doc = robot.Document
+    tool_fpo = doc.addObject("App::FeaturePython", name)
+    Tool(tool_fpo)
+
+    # attach a viewprovider in GUI mode
+    if App.GuiUp:
+        from freecad.Robot_tools.Gui.vp_rbt_tool import ViewProviderTool
+        ViewProviderTool(tool_fpo.ViewObject)
+
+    tool_fpo.Flange_link = (robot.Robot_joints[-1].Reference2
+                            if robot.Robot_joints else None)
+    tool_fpo.Tool_offset = App.Placement()
+    tool_fpo.TCP_offset = App.Placement()
+    tool_fpo.Tool_mass = 0.0
+    robot.Tools = list(robot.Tools) + [tool_fpo]
+    robot.Active_tool = tool_fpo
+    return tool_fpo
 
 
 def import_shape(rob, path):

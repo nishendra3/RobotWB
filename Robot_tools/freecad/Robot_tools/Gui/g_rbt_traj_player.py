@@ -148,14 +148,14 @@ class TrajectoryPlayer:
         fk preview on every track
         """
         for trk in self.tracks:
-            rbt_kine.jog_q_deg(trk.robot, trk.plan.q_at_time(t_sec))
+            rbt_kine.set_q(trk.robot, trk.plan.q_at_time(t_sec), preview=True)
 
     def commit_all(self) -> None:
         """
         Offset2 write on every track at the current time
         """
         for trk in self.tracks:
-            rbt_kine.resolve_offsets(
+            rbt_kine.set_q(
                 trk.robot, trk.plan.q_at_time(self.t_now))
 
     def emit_state(self, state: str) -> None:

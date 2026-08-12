@@ -344,7 +344,7 @@ class ViewProviderTool:
             self._grab_action = None
 
         if self.robot is not None and self._q_seed is not None:
-            rbt_kine.resolve_offsets(self.robot, self._q_seed)
+            rbt_kine.set_q(self.robot, self._q_seed)
 
         self._q_seed = None
         self._active_axis = None

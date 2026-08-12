@@ -34,13 +34,14 @@ from freecad.Robot_tools.App.rbt_robot import is_robot
 
 from freecad.Robot_tools.App.rbt_kine import (
     joint_limits_q_deg, curr_joint_vals_doc,
-    save_home, home_q_deg, joint_dirs, jog_q_deg,
-    resolve_offsets, set_zero_pose, hold_part_placements
+    save_home, home_q_deg, joint_dirs,
+    set_zero_pose, hold_part_placements
 )
 from freecad.Robot_tools.App.rbt_kine_types import (
     PRISMATIC, REVOLUTE, FIXED, joint_type_FC2WB)
 from freecad.Robot_tools.App.rbt_helpers_log import (
-    fcl_err, fcl_msg, fcl_warn)
+    fcl_err, fcl_msg)
+from freecad.Robot_tools.App.rbt_kine import set_q
 from freecad.Robot_tools.App.rbt_kine_joints import set_joint_cfg
 
 V3 = App.Vector
@@ -122,16 +123,9 @@ class AnimationController:
 
     def set_joint_angle_clamped(self, j_idx, value):
         """Checks joint limits before setting joint angles"""
-        low, high = joint_limits_q_deg(self.robot, j_idx)
-        value = max(low, min(high, value))
-
         q = curr_joint_vals_doc(self.robot)
-        q[j_idx] = value
-        self.j_vals = q
-
-        jog_q_deg(self.robot, q)
-
-        return value
+        q[j_idx] = float(value)
+        return set_q(self.robot, q, clamp=True, preview=True)[j_idx]
 
     def step_joint(self, j_idx, sign):
         """increment joint and return the value"""
@@ -144,23 +138,14 @@ class AnimationController:
         """
         write j_vals into Offset2
         """
-        resolve_offsets(self.robot, self.j_vals)
+        set_q(self.robot, self.j_vals)
 
     def go_home_pos(self):
         """
         home pos, clampled to joint limits
         """
-        q = list(home_q_deg(self.robot))
-        for i in range(self.j_num):
-            low, high = joint_limits_q_deg(self.robot, i)
-            c = max(low, min(high, q[i]))
-            if c != q[i]:
-                fcl_warn(f"J{i} home {q[i]:g} outside "
-                         f"[{low:g}, {high:g}], clamped to {c:g}\n")
-            q[i] = c
-        self.j_vals = q
-        jog_q_deg(self.robot, self.j_vals)
-        self.commit_joints()
+        self.j_vals = set_q(self.robot, home_q_deg(self.robot),
+                            clamp=True)
 
     def sync_joints_from_doc(self):
         """
@@ -170,9 +155,7 @@ class AnimationController:
 
     def reset_joints(self):
         """reset joints to null val"""
-        self.j_vals = [0.0] * self.j_num
-        jog_q_deg(self.robot, self.j_vals)
-        self.commit_joints()
+        self.j_vals = set_q(self.robot, [0.0] * len(self.j_vals))
 
     def set_initial_pose(self):
         """force apply offset2 with recompute-twice trick"""

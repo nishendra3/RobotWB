@@ -63,34 +63,31 @@ class TrajectoryController:
                        name: str = "") -> Optional[Waypoint]:
         """
         Add catesian wp at the given pose
-        in: tcp pose in asm coords, optional label
-        out: appended waypoint, None when ik fails to find robot joints
         """
-        q = rbt_kine.ik_tcp_in_world(self.robot,
-                                     tcp_in_world)
-        if q is None:
-            return None
-        wps = self.wps
-        wp = Waypoint(new_uid(), name or self.next_name(wps),
-                      CARTESIAN, q, tcp_in_world)
-        wps.append(wp)
-        self.commit("Add waypoint", wps)
-        return wp
+        doc = self.traj.Document
+        doc.openTransaction("Add waypoint")
+        try:
+            wp = rbt_traj.add_cartesian_waypoint(self.traj,
+                                                 tcp_in_world, name)
+            doc.commitTransaction()
+            return wp
+        except Exception:
+            doc.abortTransaction()
+            raise
 
     def teach_wp(self, name: str = "") -> Waypoint:
         """
         capture the robot's current pose as a JOINT waypoint
-        in: optional user label ("" -> next free P<n>)
-        out: the appended waypoint
         """
-        q = rbt_kine.curr_joint_vals_doc(self.robot)
-        pose = rbt_kine.fk_tcp_in_world(self.robot, q) or App.Placement()
-        wps = self.wps
-        wp = Waypoint(new_uid(), name or self.next_name(wps),
-                      JOINT, q, pose)
-        wps.append(wp)
-        self.commit("Teach waypoint", wps)
-        return wp
+        doc = self.traj.Document
+        doc.openTransaction("Teach waypoint")
+        try:
+            wp = rbt_traj.teach_waypoint(self.traj, name)
+            doc.commitTransaction()
+            return wp
+        except Exception:
+            doc.abortTransaction()
+            raise
 
     def update_wp(self, i: int) -> None:
         """
@@ -151,25 +148,9 @@ class TrajectoryController:
         move the robot to one waypoint
         out: False when the point is unreachable
         """
-        solved = rbt_traj_plan.solve_waypoints(
-            self.robot, [self.wps[wp_idx]])[0]
-        if solved.q_doc is None:
-            return False
-        rbt_kine.jog_q_deg(self.robot, solved.q_doc)
-        rbt_kine.resolve_offsets(self.robot, solved.q_doc)
-        return True
-
+        return rbt_traj_plan.goto_waypoint(self.traj,
+                                           wp_idx) is not None
     # ---------- helpers ----------
-
-    def next_name(self, wps: List[Waypoint]) -> str:
-        """
-        first unused P<n>  for waypoint
-        """
-        used = {wp.name for wp in wps}
-        i = len(wps) + 1
-        while f"P{i}" in used:
-            i += 1
-        return f"P{i}"
 
     def pose_from_world_point(self, point_world: V3) -> Placement:
         """

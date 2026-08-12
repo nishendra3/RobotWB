@@ -155,6 +155,17 @@ def is_trajectory(obj) -> bool:
     return "Waypoints_json" in props and "Ptp_speed_default" in props
 
 
+def next_waypoint_name(wps: List[Waypoint]) -> str:
+    """
+    first unused P<n>  for waypoint
+    """
+    used = {wp.name for wp in wps}
+    i = len(wps) + 1
+    while f"P{i}" in used:
+        i += 1
+    return f"P{i}"
+
+
 def load_waypoints(traj_obj) -> List[Waypoint]:
     """
     in: trajectory fpo
@@ -186,7 +197,7 @@ def teach_waypoint(traj_obj, name: str = "", motion=PTP) -> Waypoint:
     rob = traj_obj.Robot
     wps = load_waypoints(traj_obj)
     tcp = fk_tcp_in_world(rob) or App.Placement()
-    wp = Waypoint(new_uid(), name or f"P{len(wps) + 1}", JOINT,
+    wp = Waypoint(new_uid(), name or next_waypoint_name(wps), JOINT,
                   rbt_kine.curr_joint_vals_doc(rob), tcp, motion)
     save_waypoints(traj_obj, wps + [wp])
     return wp
@@ -202,7 +213,7 @@ def add_cartesian_waypoint(traj_obj, target, name: str = "",
     if q is None:
         return None
     wps = load_waypoints(traj_obj)
-    wp = Waypoint(new_uid(), name or f"P{len(wps) + 1}", CARTESIAN,
+    wp = Waypoint(new_uid(), name or next_waypoint_name(wps), CARTESIAN,
                   q, target, motion)
     save_waypoints(traj_obj, wps + [wp])
     return wp

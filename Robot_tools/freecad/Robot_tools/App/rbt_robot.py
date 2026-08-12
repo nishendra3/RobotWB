@@ -118,6 +118,7 @@ class Robot:
 
     def onDocumentRestored(self, obj):
         # check and repair saved doc when its reopened
+        self.add_joint_prop(obj)
         self.add_properties(obj)
         self.check_kin_libs(obj)
         self.check_default_tool(obj)

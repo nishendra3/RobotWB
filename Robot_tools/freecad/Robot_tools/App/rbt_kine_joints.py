@@ -27,7 +27,7 @@ class JointCfg:
     def from_dict(data: dict) -> "JointCfg":
         return JointCfg(dir=data.get("dir", 1),
                         zero=data.get("zero", 0.0),
-                        home=data.get("zero", 0.0))
+                        home=data.get("home", 0.0))
 
 
 def load_cfg_map(fpo) -> Dict[str, JointCfg]:
@@ -37,7 +37,7 @@ def load_cfg_map(fpo) -> Dict[str, JointCfg]:
     try:
         data = json.loads(fpo.Robot_joints_cfg or "{}")
     except (ValueError, TypeError) as e:
-        fcl_warn(f"{fpo.Name}: bad joing config {e}")
+        fcl_warn(f"{fpo.Name}: bad joint config {e}")
         return {}
     return {nm: JointCfg.from_dict(kv) for nm, kv in data.items()}
 

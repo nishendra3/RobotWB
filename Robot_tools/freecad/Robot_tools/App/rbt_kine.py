@@ -367,16 +367,20 @@ def dof_mask(rbt_obj) -> List[bool]:
     """
     true for joints that add a DOF to the chain
     """
-    return [j.type != FIXED
-            for j in get_chain(rbt_obj).joints]
+    chain = get_chain(rbt_obj)
+    if chain is None:
+        return []
+    return [j.type != FIXED for j in chain]
 
 
 def dof_types(rbt_obj) -> List[str]:
     """
     Joint types of the active dof joints (compressed chain)
     """
-    kin_chain = get_chain(rbt_obj).joints
-    return [j.type for j in kin_chain if j.type != FIXED]
+    chain = get_chain(rbt_obj)
+    if chain is None:
+        return []
+    return [j.type for j in chain.joints if j.type != FIXED]
 
 
 def compress_chain(vals, mask):

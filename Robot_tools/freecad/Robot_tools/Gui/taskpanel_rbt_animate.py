@@ -125,14 +125,15 @@ class AnimationController:
         """Checks joint limits before setting joint angles"""
         q = curr_joint_vals_doc(self.robot)
         q[j_idx] = float(value)
-        return set_q(self.robot, q, clamp=True, preview=True)[j_idx]
+        self.j_vals = set_q(self.robot, q, clamp=True, preview=True)
+        return self.j_vals[j_idx]
 
     def step_joint(self, j_idx, sign):
-        """increment joint and return the value"""
+        """
+        increment joint and return the value
+        """
         new_val = self.j_vals[j_idx] + sign * self.j_step
-        self.j_vals[j_idx] = new_val
-        self.set_joint_angle_clamped(j_idx, new_val)
-        return new_val
+        return self.set_joint_angle_clamped(j_idx, new_val)
 
     def commit_joints(self):
         """

@@ -11,7 +11,7 @@ from PySide.QtWidgets import (  # type: ignore
 
 from freecad.Robot_tools.Gui.rbt_helpers_ui import is_alive
 from freecad.Robot_tools.Gui.taskpanel_rbt_animate import RobotControlWidget
-from freecad.Robot_tools.App.rbt_robot import all_robots
+from freecad.Robot_tools.App.rbt_robot import all_robots, is_robot
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_warn
 from freecad.Robot_tools.Gui.rbt_fc_observer import RbtMultiCtrlObserver
 

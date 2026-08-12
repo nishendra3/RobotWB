@@ -11,8 +11,8 @@ import FreeCAD as App  # type: ignore
 
 from freecad.Robot_tools.App import rbt_kine, rbt_traj, rbt_traj_plan
 from freecad.Robot_tools.App.rbt_traj_types import (
-    CARTESIAN, DocObj, JOINT, Placement, TargetMode, MotionType,
-    V3, Waypoint, new_uid)
+    DocObj, Placement, TargetMode, MotionType,
+    V3, Waypoint)
 
 
 class TrajectoryController:
@@ -176,5 +176,7 @@ class TrajectoryController:
         doc.openTransaction(undo_name)
         try:
             setattr(self.traj, prop, value)
-        finally:
             doc.commitTransaction()
+        except Exception:
+            doc.abortTransaction()
+            raise

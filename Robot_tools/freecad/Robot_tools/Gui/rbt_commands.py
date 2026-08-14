@@ -87,7 +87,7 @@ class CommandMultiControl:
     """
     def GetResources(self):
         return {"Pixmap": os.path.join(wb_path,
-                                       'resources/icons/rbt_animateRobot.svg'),
+                                       'resources/icons/rbt_multiControl.svg'),
                 "MenuText": "Multi-Robot Control",
                 "ToolTip": "Control all robots in the document from one panel"}
 
@@ -104,7 +104,7 @@ class CommandCreateTrajectory:
 
     def GetResources(self):
         return {"Pixmap": os.path.join(wb_path,
-                                       'resources/icons/rbt_animateRobot.svg'),
+                                       'resources/icons/rbt_createTraj.svg'),
                 "MenuText": "Robot Trajectory",
                 "ToolTip": "Teach waypoints and play them as a trajectory"}
 
@@ -142,7 +142,7 @@ class CommandTrajectoryPlayer:
 
     def GetResources(self):
         return {"Pixmap": os.path.join(wb_path,
-                                       'resources/icons/rbt_animateRobot.svg'),
+                                       'resources/icons/rbt_multiPanel.svg'),
                 "MenuText": "Trajectory Player",
                 "ToolTip": "Play trajectories of all robots on one clock"}
 

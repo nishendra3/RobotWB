@@ -14,6 +14,12 @@
    xmlns:dc="http://purl.org/dc/elements/1.1/">
   <defs
      id="defs2291">
+    <rect
+       x="11.294118"
+       y="19.113123"
+       width="37.64706"
+       height="28.380091"
+       id="rect1" />
     <linearGradient
        id="linearGradient3910">
       <stop
@@ -104,7 +110,6 @@
             <dc:title>[wmayer]</dc:title>
           </cc:Agent>
         </dc:creator>
-        <dc:title>Robot_CreateRobot</dc:title>
         <dc:date>2011-10-10</dc:date>
         <dc:relation>https://www.freecad.org/wiki/index.php?title=Artwork</dc:relation>
         <dc:publisher>
@@ -129,7 +134,7 @@
   </metadata>
   <g
      id="layer1"
-     transform="translate(0,48)">
+     transform="translate(1.5802469,47.920988)">
     <g
        id="g2302"
        transform="matrix(0.31094726,0,0,0.31082981,29.983986,-19.544999)">
@@ -182,17 +187,6 @@
          class="ps03"
          d="m 9.69944,27.490925 c 0,-1.10173 -0.142533,1.06146 0,0 -2.911279,0.90138 -15.215095,10.104669 -25.727836,12.868779 -11.1312,2.92475 -45.023713,0 -45.023713,0 0,0 5.955638,10.690027 9.647939,19.303166 3.69433,8.59278 -3.215979,19.303168 -3.215979,19.303168 h 90.047424 c 0,0 0,0 0,-6.434389 0,-6.434389 0,-6.434389 0,-6.434389 C 16.131398,62.880065 3.267481,43.576898 9.69944,27.490925"
          style="fill:none;fill-rule:nonzero;stroke:#2e3436;stroke-width:6.43317;stroke-linejoin:round" />
-      <text
-         xml:space="preserve"
-         style="font-weight:bold;line-height:0%;font-family:osifont;-inkscape-font-specification:'osifont Bold';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;opacity:0.99;fill:#000000;stroke:#ff0000;stroke-width:3.21659"
-         x="-70.713402"
-         y="30.702318"
-         id="text1"
-         transform="scale(0.99981114,1.0001889)"><tspan
-           id="tspan1"
-           style="font-size:85.7758px;line-height:1.25;stroke-width:3.21659"
-           x="-70.713402"
-           y="30.702318">C</tspan></text>
     </g>
     <path
        id="path52-3"

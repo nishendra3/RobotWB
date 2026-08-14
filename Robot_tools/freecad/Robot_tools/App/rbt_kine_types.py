@@ -27,7 +27,7 @@ JOINT_TYPES = {FIXED: 0, REVOLUTE: 1, PRISMATIC: 3}
 
 def joint_type_FC2WB(fc_jnt_name: str) -> JointType:
     """
-        Map Freecad assembly wb joint type string 
+        Map Freecad assembly wb joint type string
         to the joint string names used in robot WB
     """
     if fc_jnt_name == "Revolute":

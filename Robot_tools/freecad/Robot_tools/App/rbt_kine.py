@@ -370,7 +370,7 @@ def dof_mask(rbt_obj) -> List[bool]:
     chain = get_chain(rbt_obj)
     if chain is None:
         return []
-    return [j.type != FIXED for j in chain]
+    return [j.type != FIXED for j in chain.joints]
 
 
 def dof_types(rbt_obj) -> List[str]:

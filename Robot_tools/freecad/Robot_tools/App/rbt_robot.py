@@ -194,3 +194,10 @@ def find_robot(hint=None, doc=None):
         raise RbtInputError("robot not found or not unique: "
                             f"{[r.Label for r in robs]}")
     return robs[0]
+
+
+def find_doc(doc=None):
+    doc = doc or App.ActiveDocument
+    if doc is None:
+        raise RbtInputError("no active document; pass doc=")
+    return doc

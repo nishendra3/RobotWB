@@ -35,7 +35,8 @@ def load_cfg_map(fpo) -> Dict[str, JointCfg]:
     {joint name : joint configuration}
     """
     try:
-        data = json.loads(fpo.Robot_joints_cfg or "{}")
+        data = data = json.loads(
+            getattr(fpo, "Robot_joints_cfg", None) or "{}")
     except (ValueError, TypeError) as e:
         fcl_warn(f"{fpo.Name}: bad joint config {e}")
         return {}

@@ -5,8 +5,6 @@ from __future__ import annotations
 
 from typing import List, Tuple
 
-import FreeCAD as App  # type: ignore
-
 from freecad.Robot_tools.App import rbt_kine
 from freecad.Robot_tools.App.rbt_creator import RobotCreator
 from freecad.Robot_tools.App.rbt_errors import (
@@ -14,7 +12,7 @@ from freecad.Robot_tools.App.rbt_errors import (
 from freecad.Robot_tools.App.rbt_kine_types import (
     FIXED, PRISMATIC, REVOLUTE)
 from freecad.Robot_tools.App.rbt_robot import (
-    all_robots, find_robot, is_robot)
+    all_robots, find_robot, is_robot, find_doc)
 from freecad.Robot_tools.App.rbt_tool import create_tool, import_shape
 from freecad.Robot_tools.App.rbt_traj import (
     add_cartesian_waypoint, create_trajectory, is_trajectory,
@@ -33,16 +31,9 @@ __all__ = [
 ]
 
 
-def _find_doc(doc=None):
-    doc = doc or App.ActiveDocument
-    if doc is None:
-        raise RbtInputError("no active document; pass doc=")
-    return doc
-
-
 def get_robots(doc=None) -> List["RobotApi"]:
     """all robots in the doc (active doc when None)"""
-    return [RobotApi(o) for o in all_robots(_find_doc(doc))]
+    return [RobotApi(o) for o in all_robots(find_doc(doc))]
 
 
 def get_robot(hint=None, doc=None) -> "RobotApi":
@@ -318,7 +309,7 @@ class RobotBuilder:
     """
 
     def __init__(self, doc=None):
-        self.doc = _find_doc(doc)
+        self.doc = find_doc(doc)
         self.creator = RobotCreator()
         self.creator.asm_doc = self.doc
 

@@ -4,7 +4,7 @@ controller for trajectory editing & playback
 """
 from __future__ import annotations
 
-from typing import List, Optional, Iterator
+from typing import List, Optional, Generator
 from contextlib import contextmanager
 
 import FreeCAD as App  # type: ignore
@@ -45,49 +45,41 @@ class TrajectoryController:
 
     # ---------- mutations ----------
 
+    @contextmanager
+    def openAndCommitTransaction(self,
+                                 label: str) -> Generator[None, None, None]:
+        doc = self.traj.Document
+        doc.openTransaction(label)
+        try:
+            yield
+            doc.commitTransaction()
+        except Exception:
+            doc.abortTransaction()
+            raise
+
     def commit(self, label: str, wps: List[Waypoint]) -> None:
         """
         save the created waypoints all at once
         in: label for undoing operation, waypoints
         """
-        doc = self.traj.Document
-        doc.openTransaction(label)
-        try:
+        with self.openAndCommitTransaction(label):
             rbt_traj.save_waypoints(self.traj, wps)
-            doc.commitTransaction()
-        except Exception:
-            doc.abortTransaction()
-            raise
 
     def add_wp_at_pose(self, tcp_in_world: Placement,
                        name: str = "") -> Optional[Waypoint]:
         """
         Add catesian wp at the given pose
         """
-        doc = self.traj.Document
-        doc.openTransaction("Add waypoint")
-        try:
-            wp = rbt_traj.add_cartesian_waypoint(self.traj,
-                                                 tcp_in_world, name)
-            doc.commitTransaction()
-            return wp
-        except Exception:
-            doc.abortTransaction()
-            raise
+        with self.openAndCommitTransaction("Add waypoint"):
+            return rbt_traj.add_cartesian_waypoint(self.traj,
+                                                   tcp_in_world, name)
 
     def teach_wp(self, name: str = "") -> Waypoint:
         """
         capture the robot's current pose as a JOINT waypoint
         """
-        doc = self.traj.Document
-        doc.openTransaction("Teach waypoint")
-        try:
-            wp = rbt_traj.teach_waypoint(self.traj, name)
-            doc.commitTransaction()
-            return wp
-        except Exception:
-            doc.abortTransaction()
-            raise
+        with self.openAndCommitTransaction("Teach waypoint"):
+            return rbt_traj.teach_waypoint(self.traj, name)
 
     def update_wp(self, i: int) -> None:
         """
@@ -100,7 +92,8 @@ class TrajectoryController:
             wps[i].tcp_in_world = pose
 
     @contextmanager
-    def edit_wps(self, undo_label: str) -> Iterator[List[Waypoint]]:
+    def edit_wps(self, undo_label: str) -> Generator[List[Waypoint],
+                                                     None, None]:
         wps = self.wps
         yield wps
         self.commit(undo_label, wps)
@@ -115,7 +108,12 @@ class TrajectoryController:
 
     def set_wp_motion(self, i: int, motion: MotionType) -> None:
         with self.edit_wps("Change waypoint motion") as wps:
+            # set motion type PTP/LIN
             wps[i].motion = motion
+
+            # set correct default speed for that motion
+            if wps[i].duration is None:  # not fix time-based motion
+                wps[i].speed = rbt_kine.default_speed(self.robot, motion)
 
     def set_wp_pace(self, i: int, value: Optional[float],
                     by_duration: bool) -> None:
@@ -162,21 +160,3 @@ class TrajectoryController:
         tcp_in_world = (rbt_kine.fk_tcp_in_world(self.robot, q) or
                         App.Placement())
         return App.Placement(point_world, tcp_in_world.Rotation)
-
-    def set_prop(self, prop: str, value: float) -> None:
-        """
-        write trajectory property with an undo transaction
-        """
-        if getattr(self.traj, prop) == value:
-            return
-
-        undo_name = "changed " + prop
-
-        doc = self.traj.Document
-        doc.openTransaction(undo_name)
-        try:
-            setattr(self.traj, prop, value)
-            doc.commitTransaction()
-        except Exception:
-            doc.abortTransaction()
-            raise

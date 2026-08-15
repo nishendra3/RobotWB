@@ -16,12 +16,10 @@ from freecad.Robot_tools.App import rbt_kine, rbt_traj
 from freecad.Robot_tools.App.rbt_traj_profile import TimeProfile, make_profile
 from freecad.Robot_tools.App.rbt_traj_types import (
     LIN, JOINT, CARTESIAN, PathSegment,
-    SolvedWaypoint, SpeedSettings, PlanTiming, Waypoint, DocObj
-)
+    SolvedWaypoint, SpeedSettings, PlanTiming, Waypoint, DocObj)
 from freecad.Robot_tools.App.rbt_global_constants import (
     LIN_IK_STEP_DEG, LIN_IK_STEP_MM, LIN_IK_STEPS_MAX,
-    DEFAULT_LIN_SPEED_ORI
-)
+    DEFAULT_LIN_SPEED_ORI, LIM_EPS)
 from freecad.Robot_tools.App.rbt_helpers_math import lerp_plc, rot_delta_deg
 
 V3: TypeAlias = App.Vector
@@ -30,8 +28,6 @@ Placement: TypeAlias = App.Placement
 FULL_SPEED_PCT = 100
 MIN_SPEED_PCT = 1e-3
 SPEED_EPS_PCT = 1E-3
-
-LIM_EPS = 1e-6
 
 
 class TrajectoryPlan:
@@ -91,7 +87,7 @@ def solve_waypoints(rbt_obj: DocObj,
     in: robot fpo, waypoints
     out: solved & valid waypoint per input
     """
-    n_jnts = len(rbt_obj.Robot_joints)
+    n_jnts = len(rbt_obj.RobotJoints)
     solved: List[SolvedWaypoint] = []
 
     for wp in wps:
@@ -241,24 +237,30 @@ def check_timing_limits(durations: List[float], seg_t_min: List[float],
     total = sum(durations)
     min_duration = sum(seg_t_min)
 
+    # bad segments error
+    def seg_err(i):
+        wp = solved[i+1].wp
+        return (f"'{wp.name}': J{pacer_joint_idxs[i]+1} over max speed, "
+                f"segment needs >= {seg_t_min[i]:.2f} s, "
+                f"planned {durations[i]:.2f} s "
+                f"(override {override:.0f}%)")
+
     # find segments in violation of joint max speed limits
-    bad_indices = [i for i, (duration, min_allowed)
-                   in enumerate(zip(durations, seg_t_min))
-                   if duration < min_allowed*(1 - LIM_EPS)]
-    if not bad_indices:
+    bad_segs = tuple((i, seg_err(i)) for i, (duration, min_allowed)
+                     in enumerate(zip(durations, seg_t_min))
+                     if duration < min_allowed*(1 - LIM_EPS))
+    if bad_segs:
+        pace_seg_idx, err = bad_segs[0]
+    else:
         err = ""
         pace_seg_idx = durations.index(max(durations)) if total > 0 else -1
-    else:
-        pace_seg_idx = bad_indices[0]
-        wp_bad = solved[pace_seg_idx+1].wp
-        err = (f"'{wp_bad.name}' violating joint speed limits")
 
     # get the pace determining joint for violating segment
     pace_joint_idx = (pacer_joint_idxs[pace_seg_idx]
                       if pace_seg_idx >= 0 else -1)
 
-    return PlanTiming(total, override, not bad_indices,
-                      min_duration, pace_seg_idx, pace_joint_idx, err)
+    return PlanTiming(total, override, not bad_segs, min_duration,
+                      pace_seg_idx, pace_joint_idx, err, bad_segs)
 
 
 def sample_tcp_path_world(rbt_obj: DocObj,
@@ -293,7 +295,7 @@ def make_plan(traj_obj: DocObj) -> PlanResult:
     """
     wps = rbt_traj.load_waypoints(traj_obj)
     plan, solved = build_plan(traj_obj.Robot, wps,
-                              rbt_traj.load_speed_settings(traj_obj))
+                              rbt_kine.load_speed_settings(traj_obj.Robot))
     if plan is None:
         msg = "needs 2+ waypoints" if len(wps) < 2 else "IK failure"
         return None, solved, msg

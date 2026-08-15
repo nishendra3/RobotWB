@@ -436,7 +436,7 @@ class DefineRobot:
         link_obj, face_ref = self.creator.resolve_face(obj, sub)
         if link_obj is None:
             owner = self.creator.assembly_owner(obj, sub)
-            rob_asm = getattr(self.creator.fpo, "Robot_assembly", None)
+            rob_asm = getattr(self.creator.fpo, "RobotAssembly", None)
             if owner is None or owner is not rob_asm:
                 # selected face belongs to another assembly
                 # TODO: promt the user to switch to current assembly ?
@@ -493,8 +493,8 @@ class DefineRobot:
 
             # pick order sanity check
             # auto orient picks instead of trusting click order
-            prev_child = (self.creator.fpo.Robot_joints[-1].Reference2[0]
-                          if self.creator.fpo.Robot_joints
+            prev_child = (self.creator.fpo.RobotJoints[-1].Reference2[0]
+                          if self.creator.fpo.RobotJoints
                           else getattr(self.creator.grounded_joint(),
                                        "ObjectToGround", None))
             if prev_child is not None and refs[1][0] is prev_child:

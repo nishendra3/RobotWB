@@ -55,8 +55,8 @@ class ViewProviderRobot:
         """
         obj = self.Object
         kids = []
-        if getattr(obj, "Robot_assembly", None):
-            kids.append(obj.Robot_assembly)
+        if getattr(obj, "RobotAssembly", None):
+            kids.append(obj.RobotAssembly)
         kids.extend(getattr(obj, "Tools", []) or [])
         kids.extend(getattr(obj, "Trajectories", []) or [])
         return kids
@@ -102,7 +102,7 @@ def start_rbt_placement(robot):
     """
     Using native transform dragger on the assembly
     """
-    asm, bl = getattr(robot, "Robot_assembly", None), base_link(robot)
+    asm, bl = getattr(robot, "RobotAssembly", None), base_link(robot)
 
     if asm is None or bl is None:
         fcl_err("robot has no assembly or base link to move")
@@ -117,5 +117,5 @@ def start_rbt_placement(robot):
         doc.resetEdit()
 
     # anchor the gizmo on base frame
-    asm.ViewObject.TransformOrigin = bl.Placement.multiply(robot.Base_offset)
+    asm.ViewObject.TransformOrigin = bl.Placement.multiply(robot.BaseOffset)
     doc.setEdit(asm.Name, 1)  # 1 = Transform mode

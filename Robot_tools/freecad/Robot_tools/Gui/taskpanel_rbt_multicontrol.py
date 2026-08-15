@@ -174,7 +174,7 @@ class MultiRobotControlWidget(QWidget):
         self._on_pick(idx)
 
     def on_doc_changed(self, obj, prop: str) -> None:
-        if prop == "Robot_assembly":
+        if prop == "RobotAssembly":
             self._refresh_timer.start()
             return
         page = self.stack.currentWidget()

@@ -33,7 +33,7 @@ def extract_chain(robot_obj: "App.DocumentObject") -> Optional[ChainSpec]:
     algebraically (unrotate)
     All frames in robot-assembly coords -> chain invariant under base moves
     """
-    joints_fpo: List["App.DocumentObject"] = list(robot_obj.Robot_joints or [])
+    joints_fpo: List["App.DocumentObject"] = list(robot_obj.RobotJoints or [])
     if not joints_fpo:
         fcl_err("Robot has no joints")
         return
@@ -123,7 +123,7 @@ def extract_chain(robot_obj: "App.DocumentObject") -> Optional[ChainSpec]:
     # flange - active tool's TCP taken as chain tip (TCP_Placement in World)
     flange_local: Placement = Placement()
     tool: "Optional[App.DocumentObject]" = getattr(robot_obj,
-                                                   "Active_tool", None)
+                                                   "ActiveTool", None)
     if tool and getattr(tool, "Flange_link", None) and tool.Flange_link[0]:
         # use the active tool's tcp as the chain tip
         tcp_in_asm = p_world_in_asm.multiply(Placement(tool.TCP_placement))
@@ -206,7 +206,7 @@ def joint_dirs(robot_obj: "App.DocumentObject") -> List[int]:
     """
     m = load_cfg_map(robot_obj)
     return [-1 if m.get(j.Name, JointCfg()).dir < 0 else 1
-            for j in (robot_obj.Robot_joints or [])]
+            for j in (robot_obj.RobotJoints or [])]
 
 
 def joint_zeros(robot_obj: "App.DocumentObject") -> List[float]:
@@ -216,7 +216,7 @@ def joint_zeros(robot_obj: "App.DocumentObject") -> List[float]:
     """
     m = load_cfg_map(robot_obj)
     return [float(m.get(j.Name, JointCfg()).zero)
-            for j in (robot_obj.Robot_joints or [])]
+            for j in (robot_obj.RobotJoints or [])]
 
 
 def joint_limits_doc(j: "App.DocumentObject") -> tuple:

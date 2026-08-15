@@ -11,7 +11,8 @@ import FreeCADGui as Gui  # type: ignore
 from PySide.QtCore import QTimer  # type: ignore
 from PySide.QtWidgets import QWidget  # type: ignore
 
-from freecad.Robot_tools.App import rbt_traj
+from freecad.Robot_tools.App.rbt_properties import (
+    KINE_PROPS, TRAJ_PROPS, JNT_KINE_PROPS)
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_warn
 from freecad.Robot_tools.App.rbt_traj_types import DocObj
 from freecad.Robot_tools.Gui.g_rbt_traj_ctrl import TrajectoryController
@@ -34,7 +35,6 @@ class TrajectoryControlWidget(QWidget):
         "btn_teach", "btn_pick", "btn_xyz", "grp_xyz", "btn_xyz_add",
         "qsb_x", "qsb_y", "qsb_z", "qsb_yaw", "qsb_pitch", "qsb_roll",
         "btn_up", "btn_down", "btn_del", "btn_goto", "btn_update",
-        "dsb_ptp_speed", "dsb_lin_speed", "dsb_override",
         "btn_play", "btn_stop", "sl_time", "lbl_time",
         "sl_scale", "chk_loop",
     )
@@ -49,12 +49,6 @@ class TrajectoryControlWidget(QWidget):
         getObjByName(self.ui, "lay_play").addWidget(self.play_ui)
         for name in self.UI_NAMES:
             setattr(self, name, getObjByName(self.ui, name))
-
-        self.speed_boxes = {
-            self.dsb_ptp_speed: "Ptp_speed_default",
-            self.dsb_lin_speed: "Lin_speed_default",
-            self.dsb_override: "Speed_override",
-        }
 
         self.table = WaypointTable(
             self.tbl_wps, self.ctrl.rename_wp, self.ctrl.set_wp_mode,
@@ -83,6 +77,18 @@ class TrajectoryControlWidget(QWidget):
         self.lbl_robot.setText(f"Robot: {self.ctrl.robot.Label}")
         self.le_name.setText(traj.Label)
 
+    def on_doc_changed(self, obj: DocObj, prop: str) -> None:
+        from_robot = (obj is self.ctrl.robot and
+                      (prop in KINE_PROPS or prop == "BasePlacement"))
+        from_traj = obj is self.ctrl.traj and prop in TRAJ_PROPS
+        from_joint = (prop in JNT_KINE_PROPS
+                      and obj in self.ctrl.robot.RobotJoints)
+        if not (from_robot or from_traj or from_joint):
+            return
+        if not self.pending_refresh:
+            self.pending_refresh = True
+            QTimer.singleShot(0, self.do_refresh)
+
     def connect_signals(self) -> None:
         self.le_name.editingFinished.connect(self.on_rename_traj)
         self.tbl_wps.itemSelectionChanged.connect(self.on_row_selected)
@@ -100,21 +106,7 @@ class TrajectoryControlWidget(QWidget):
         self.btn_goto.clicked.connect(self.on_goto)
         self.btn_update.clicked.connect(self.on_update_wp)
 
-        # speed boxes
-        for dsb, prop in self.speed_boxes.items():
-            dsb.editingFinished.connect(
-                lambda d=dsb, p=prop: self.ctrl.set_prop(p, d.value()))
-
     # ================= refresh =================
-
-    def on_doc_changed(self, obj: DocObj, prop: str) -> None:
-        is_not_traj = obj is not self.ctrl.traj
-        invalid_prop = prop not in rbt_traj.SCHEMA_PROPS
-        if is_not_traj or invalid_prop:
-            return
-        if not self.pending_refresh:
-            self.pending_refresh = True
-            QTimer.singleShot(0, self.do_refresh)
 
     def do_refresh(self) -> None:
         try:
@@ -128,22 +120,13 @@ class TrajectoryControlWidget(QWidget):
 
     def refresh(self) -> None:
         """
-        rebuild table, timing status and player
+        rebuild table and player
         """
         plan, solved = self.ctrl.get_plan()
-        bad_timing = plan is not None and not plan.timing.feasible
-        pace_row = plan.timing.pace_seg + 1 if bad_timing else -1
-        pace_msg = plan.timing.err_msg if bad_timing else ""
-        self.table.fill(solved, pace_row, pace_msg)
-        self.refresh_speeds()
+        bad_rows = ({seg + 1: msg for seg, msg in plan.timing.bad_segs}
+                    if plan else {})
+        self.table.fill(solved, bad_rows)
         self.rebuild_player(plan)
-
-    def refresh_speeds(self) -> None:
-        """
-        re-read the user entered values for default speeds & override
-        """
-        for dsb, prop in self.speed_boxes.items():
-            dsb.setValue(getattr(self.ctrl.traj, prop))
 
     def rebuild_player(self, plan) -> None:
         player = (None if plan is None else

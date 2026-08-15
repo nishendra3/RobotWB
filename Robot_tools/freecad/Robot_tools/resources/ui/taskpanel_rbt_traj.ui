@@ -38,9 +38,6 @@
       <bool>true</bool>
      </attribute>
      <column>
-      <property name="text"><string>#</string></property>
-     </column>
-     <column>
       <property name="text"><string>Name</string></property>
      </column>
      <column>
@@ -57,9 +54,6 @@
      </column>
      <column>
       <property name="text"><string>Pose</string></property>
-     </column>
-     <column>
-      <property name="text"><string>Status</string></property>
      </column>
     </widget>
    </item>
@@ -170,42 +164,6 @@
      </item>
     </layout>
    </item>
-
-   <item>
-    <widget class="QGroupBox" name="grp_timing">
-     <property name="title"><string>Timing</string></property>
-     <layout class="QGridLayout" name="timingGrid">
-      
-      <item row="0" column="0">
-       <widget class="QDoubleSpinBox" name="dsb_ptp_speed">
-        <property name="minimum"><double>1.0</double></property>
-        <property name="maximum"><double>100.0</double></property>
-        <property name="value"><double>50.0</double></property>
-        <property name="suffix"><string> %</string></property>
-       </widget>
-      </item>
-      
-      <item row="0" column="1">
-       <widget class="QDoubleSpinBox" name="dsb_lin_speed">
-        <property name="minimum"><double>1</double></property>
-        <property name="maximum"><double>999.0</double></property>
-        <property name="value"><double>100.0</double></property>
-        <property name="suffix"><string> mm/s</string></property>
-       </widget>
-      </item>
-      
-      <item row="0" column="2">
-       <widget class="QDoubleSpinBox" name="dsb_override">
-        <property name="minimum"><double>1.0</double></property>
-        <property name="maximum"><double>100.0</double></property>
-        <property name="value"><double>100.0</double></property>
-        <property name="suffix"><string> %</string></property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-
    <item>
     <layout class="QVBoxLayout" name="lay_play"/>
    </item>

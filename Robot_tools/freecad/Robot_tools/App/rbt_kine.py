@@ -13,6 +13,8 @@ import FreeCAD as App  # type: ignore
 
 from freecad.Robot_tools.App.rbt_kine_types import (
     ChainSpec, joint_type_FC2WB, REVOLUTE, PRISMATIC, FIXED)
+from freecad.Robot_tools.App.rbt_traj_types import (
+    SpeedSettings, LIN)
 from freecad.Robot_tools.App.rbt_kine_chain import (
     extract_chain, joint_dirs, joint_limits_doc,
     joint_value_doc, q_doc_to_si, q_si_to_doc,
@@ -59,21 +61,21 @@ def recompute_asm(rbt_obj: "App.DocumentObject") -> None:
     """
         Recomputes robot assembly
     """
-    asm = getattr(rbt_obj, "Robot_assembly", None)
+    asm = getattr(rbt_obj, "RobotAssembly", None)
     if asm is not None:
         try:
             asm.recompute()
         except Exception as e:
             fcl_err(f"Unable to recompute assembly: {e}")
     else:
-        fcl_err("Unable to find attr <Robot_assembly>")
+        fcl_err("Unable to find attr <RobotAssembly>")
 
 
 def recompute_tool(rbt_obj: "App.DocumentObject") -> None:
     """
         Recomputes tool object
     """
-    tool = getattr(rbt_obj, "Active_tool", None)
+    tool = getattr(rbt_obj, "ActiveTool", None)
     if tool is None:
         return
     try:
@@ -83,7 +85,7 @@ def recompute_tool(rbt_obj: "App.DocumentObject") -> None:
 
 
 def backend_name(rbt_obj: "App.DocumentObject") -> str:
-    return getattr(rbt_obj, "Kinematics_lib", DEFAULT_KIN_LIB)
+    return getattr(rbt_obj, "KinematicsLib", DEFAULT_KIN_LIB)
 
 
 def load_backend(lib_name: str, chain: Chain) -> Optional[KinematicsBackend]:
@@ -172,12 +174,14 @@ def curr_joint_vals_doc(rbt_obj: "App.DocumentObject") -> List[float]:
     """
     return [joint_value_doc(j, d, z)
             for d, z, j in zip(joint_dirs(rbt_obj), joint_zeros(rbt_obj),
-                               rbt_obj.Robot_joints)]
+                               rbt_obj.RobotJoints)]
 
 
 def joint_limits_q_deg(rbt_obj, j_idx: int):
-    """q-space limits (about the zero pose), direction flipped"""
-    low, high = joint_limits_doc(rbt_obj.Robot_joints[j_idx])
+    """
+    q-space limits (about the zero pose), direction flipped
+    """
+    low, high = joint_limits_doc(rbt_obj.RobotJoints[j_idx])
     if joint_dirs(rbt_obj)[j_idx] == -1:
         low, high = -high, -low
     return low, high
@@ -185,9 +189,9 @@ def joint_limits_q_deg(rbt_obj, j_idx: int):
 
 def check_q(rbt_obj, q_deg) -> List[float]:
     """
-    validate length against Robot_joints
+    validate length against RobotJoints
     """
-    n = len(rbt_obj.Robot_joints)
+    n = len(rbt_obj.RobotJoints)
     if len(q_deg) != n:
         raise RbtInputError(f"need {n} joint values, got {len(q_deg)}")
     return [float(v) for v in q_deg]
@@ -230,7 +234,7 @@ def move_to(rbt_obj, target, q_seed=None, clamp=False, preview=False,
 def jog_q_deg(rbt_obj, q_deg):
     """continuous jog: FK only"""
     apply_joint_angles(rbt_obj, q_deg)
-    tool = getattr(rbt_obj, "Active_tool", None)
+    tool = getattr(rbt_obj, "ActiveTool", None)
     if tool:
         tool.recompute()
 
@@ -240,7 +244,7 @@ def save_home(rbt_obj) -> None:
     save current pose as home position
     """
     m = load_cfg_map(rbt_obj)
-    for j in rbt_obj.Robot_joints:
+    for j in rbt_obj.RobotJoints:
         m[j.Name] = replace(m.get(j.Name, JointCfg()),
                             home=joint_value_doc(j, 1))
     save_cfg_map(rbt_obj, m)
@@ -251,7 +255,7 @@ def set_zero_pose(rbt_obj) -> None:
     save current pose as zero (null) reference
     """
     m = load_cfg_map(rbt_obj)
-    for j in rbt_obj.Robot_joints:
+    for j in rbt_obj.RobotJoints:
         m[j.Name] = replace(m.get(j.Name, JointCfg()),
                             zero=joint_value_doc(j, 1))
     save_cfg_map(rbt_obj, m)
@@ -264,7 +268,7 @@ def home_q_deg(rbt_obj) -> List[float]:
     """
     m = load_cfg_map(rbt_obj)
     out = []
-    for j in rbt_obj.Robot_joints:
+    for j in rbt_obj.RobotJoints:
         cfg = m.get(j.Name, JointCfg())
         d = -1 if cfg.dir < 0 else 1
         out.append(d * (float(cfg.home) - float(cfg.zero)))
@@ -317,7 +321,7 @@ def apply_joint_angles(rbt_obj, q_deg):
             part.purgeTouched()  # prevent assm recompute
 
     # update the tool placement
-    tool = getattr(rbt_obj, "Active_tool", None)
+    tool = getattr(rbt_obj, "ActiveTool", None)
     if tool is not None:
         tool.TCP_placement = (p_asm_in_world(rbt_obj)
                               .multiply(F)
@@ -326,7 +330,7 @@ def apply_joint_angles(rbt_obj, q_deg):
 
     # update the joint markers
     if App.GuiUp:
-        for jnt in (rbt_obj.Robot_joints or []):
+        for jnt in (rbt_obj.RobotJoints or []):
             proxy = getattr(jnt.ViewObject, "Proxy", None)
             if hasattr(proxy, "redrawJointPlacements"):
                 proxy.redrawJointPlacements(jnt)
@@ -345,8 +349,8 @@ def resolve_offsets(rbt_obj, q_deg):
     try:
         dirs = joint_dirs(rbt_obj)
         zeros = joint_zeros(rbt_obj)
-        with hold_part_placements(rbt_obj.Robot_assembly):
-            for i, joint in enumerate(rbt_obj.Robot_joints):
+        with hold_part_placements(rbt_obj.RobotAssembly):
+            for i, joint in enumerate(rbt_obj.RobotJoints):
                 jt = joint_type_FC2WB(joint.JointType)
                 off = dirs[i]*q_deg[i] + zeros[i]
                 if jt == REVOLUTE:
@@ -534,17 +538,36 @@ def hold_part_placements(asm):
                 o.purgeTouched()
 
 
+def load_speed_settings(rbt_obj) -> SpeedSettings:
+    """
+    in: robot fpo
+    out: SpeedSettings
+    """
+    return SpeedSettings(rbt_obj.LinSpeedDefault,
+                         rbt_obj.PtpSpeedDefault,
+                         rbt_obj.SpeedOverride)
+
+
+def default_speed(rbt_obj, motion) -> float:
+    """
+    in: robot fpo, motion type
+    out: default speed for a new waypoint
+    """
+    return (rbt_obj.LinSpeedDefault if motion == LIN
+            else rbt_obj.PtpSpeedDefault)
+
+
 def joint_max_speeds(rbt_obj) -> List[float]:
     """
     per-joint full speed (use defaults if missing)
     in: robot_fpo
     out: List[deg/sec (revolute)|mm/sec (prismatic)|0 (fixed)]
     """
-    stored = list(getattr(rbt_obj, "Robot_joints_max_speed", None) or [])
     speeds: List[float] = []
-    for i, jnt in enumerate(rbt_obj.Robot_joints):
-        if i < len(stored) and stored[i] > 0.0:
-            speeds.append(float(stored[i]))
+    for i, jnt in enumerate(rbt_obj.RobotJoints):
+        v = float(getattr(jnt, "MaxSpeed", 0.0) or 0.0)
+        if v > 0.0:
+            speeds.append(v)
             continue
         jtype = joint_type_FC2WB(jnt.JointType)
         if jtype == REVOLUTE:
@@ -555,3 +578,16 @@ def joint_max_speeds(rbt_obj) -> List[float]:
             speeds.append(0.0)
 
     return speeds
+
+
+def ensure_speed_props(rbt_obj) -> None:
+    """
+    MaxSpeed prop on every robot joint
+    """
+    for jnt in rbt_obj.RobotJoints:
+        if "MaxSpeed" not in jnt.PropertiesList:
+            jt = joint_type_FC2WB(jnt.JointType)
+            unit = "mm/s" if jt == PRISMATIC else "deg/s"
+            jnt.addProperty("App::PropertyFloat", "MaxSpeed", "Robot",
+                            f"full joint speed ({unit})")
+            jnt.MaxSpeed = DEFAULT_MAX_SPEEDS.get(jt, 0.0)

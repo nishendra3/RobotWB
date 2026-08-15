@@ -8,54 +8,17 @@ from typing import List
 import FreeCAD as App  # type: ignore
 
 from freecad.Robot_tools.App import rbt_kine
-from freecad.Robot_tools.App.rbt_kine import (
-    fk_tcp_in_world, ik_tcp_in_world
-)
+from freecad.Robot_tools.App.rbt_properties import (
+    TRAJ_SCHEMA, TRAJ_PROPS, SPEED_PROPS)
 from freecad.Robot_tools.App.rbt_global_constants import (
-    DEFAULT_TRAJ_SAMPLES, DEFAULT_LIN_SPEED_TCP, TRAJ_JSON_VERSION,
-    DEFAULT_PTP_SPEED, WB_NAME)
+    DEFAULT_TRAJ_SAMPLES, TRAJ_JSON_VERSION, WB_NAME)
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_warn
 from freecad.Robot_tools.App.rbt_traj_types import (
-    SpeedSettings, Waypoint, DocObj, PTP,
-    CARTESIAN, JOINT, new_uid)
-
+    Waypoint, DocObj, PTP, CARTESIAN, JOINT, new_uid)
 
 _TYPE_ = f"{WB_NAME}::Trajectory"
 
-TRAJ_SCHEMA = [
-    ("Robot", "App::PropertyLinkGlobal", "Trajectory",
-     "Robot this trajectory drives"),
-
-    ("Waypoints_json", "App::PropertyString", "Trajectory",
-     "(hidden) serialised waypoints, edit via the trajectory panel"),
-
-    ("Waypoint_count", "App::PropertyInteger", "Trajectory",
-     "(read only) number of waypoints"),
-
-    ("Lin_speed_default", "App::PropertyFloat", "Timing",
-     "default LIN TCP speed (mm/s)"),
-
-    ("Ptp_speed_default", "App::PropertyFloat", "Timing",
-     "default PTP speed (% of maximum possible robot speed)"),
-
-    ("Speed_override", "App::PropertyFloat", "Timing",
-     "global speed scaling 1-100 %"),
-
-    ("Preview_samples", "App::PropertyInteger", "Display",
-     "Path preview samples per segment between two taught points"),
-]
-
-SCHEMA_PROPS = {n for n, *_ in TRAJ_SCHEMA}
-
 EMPTY_JSON = json.dumps({"version": TRAJ_JSON_VERSION, "waypoints": []})
-
-LIM_EPS = 1e-6
-
-CLAMPS = {
-    "Ptp_speed_default": (0.0, 100.0),
-    "Lin_speed_default": (LIM_EPS, float("inf")),
-    "Speed_override": (1.0, 100.0),
-}
 
 
 class Trajectory:
@@ -63,14 +26,9 @@ class Trajectory:
         self.Type = _TYPE_
         self.add_properties(obj)
         obj.Proxy = self
-        obj.Preview_samples = DEFAULT_TRAJ_SAMPLES
-        obj.Waypoints_json = EMPTY_JSON
+        obj.PreviewSamples = DEFAULT_TRAJ_SAMPLES
+        obj.WaypointsJson = EMPTY_JSON
         self.set_editor_modes(obj)
-
-        obj.Ptp_speed_default = DEFAULT_PTP_SPEED
-        obj.Lin_speed_default = DEFAULT_LIN_SPEED_TCP
-
-        obj.Speed_override = 100
 
     def add_properties(self, obj):
         """
@@ -83,17 +41,30 @@ class Trajectory:
                 continue
             obj.addProperty(ptype, name, group, doc)
 
+    def drop_speed_props(self, fp):
+        """
+        remove props from older docs
+        """
+        rob = getattr(fp, "Robot", None)
+        for p in SPEED_PROPS:
+            if p not in fp.PropertiesList:
+                continue
+            if rob is not None and hasattr(rob, p):
+                setattr(rob, p, getattr(fp, p))
+            fp.removeProperty(p)
+
     def set_editor_modes(self, fp):
         """
         hide json waypoints & counts set to read-only
         """
         READ_ONLY = 1
         HIDDEN = 2
-        fp.setEditorMode("Waypoints_json", HIDDEN)
-        fp.setEditorMode("Waypoint_count", READ_ONLY)
+        fp.setEditorMode("WaypointsJson", HIDDEN)
+        fp.setEditorMode("WaypointCount", READ_ONLY)
 
     def onDocumentRestored(self, fp):
         self.add_properties(fp)
+        self.drop_speed_props(fp)
         self.safe_load_json(fp)
         self.set_editor_modes(fp)
 
@@ -103,44 +74,27 @@ class Trajectory:
         if neeeded
         """
         try:
-            json.loads(fp.Waypoints_json or EMPTY_JSON)
+            json.loads(fp.WaypointsJson or EMPTY_JSON)
         except ValueError:
             fcl_warn(f"{fp.Name}: unreadable waypoint json data\n")
-            fp.Waypoints_json = EMPTY_JSON
+            fp.WaypointsJson = EMPTY_JSON
 
     def onChanged(self, fp, prop):
         if "Restore" in fp.State:
             return
 
-        if prop == "Waypoints_json":
+        if prop == "WaypointsJson":
             n = len(load_waypoints(fp))
-            if fp.Waypoint_count != n:
-                fp.Waypoint_count = n
+            if fp.WaypointCount != n:
+                fp.WaypointCount = n
 
-        elif prop in CLAMPS:
-            low, high = CLAMPS[prop]
-            val = getattr(fp, prop)
-            clamped = min(max(val, low), high)
-            if val != clamped:
-                setattr(fp, prop, clamped)
-
-        if prop in SCHEMA_PROPS:
+        if prop in TRAJ_PROPS:
             self.plan_cache = None
 
     # bypass default freecad methods
     def execute(self, fp): pass
     def dumps(self): return None
     def loads(self, state): return None
-
-
-def load_speed_settings(traj_obj) -> SpeedSettings:
-    """
-    in: trajectory fpo
-    out: SpeedSettings
-    """
-    return SpeedSettings(traj_obj.Lin_speed_default,
-                         traj_obj.Ptp_speed_default,
-                         traj_obj.Speed_override)
 
 
 def is_trajectory(obj) -> bool:
@@ -152,7 +106,7 @@ def is_trajectory(obj) -> bool:
     if getattr(proxy, "Type", "") == _TYPE_:
         return True
     props = getattr(obj, "PropertiesList", [])
-    return "Waypoints_json" in props and "Ptp_speed_default" in props
+    return "WaypointsJson" in props
 
 
 def next_waypoint_name(wps: List[Waypoint]) -> str:
@@ -172,7 +126,7 @@ def load_waypoints(traj_obj) -> List[Waypoint]:
     out: waypoints, empty list on missing/bad json
     """
     try:
-        data = json.loads(traj_obj.Waypoints_json or EMPTY_JSON)
+        data = json.loads(traj_obj.WaypointsJson or EMPTY_JSON)
         wps = data.get("waypoints", [])
         return [Waypoint.from_dict(w) for w in wps]
     except (ValueError, TypeError) as e:
@@ -185,7 +139,7 @@ def save_waypoints(traj_obj, wps: List[Waypoint]) -> None:
     single json write & count sync
     in: trajectory fpo, waypoints
     """
-    traj_obj.Waypoints_json = json.dumps({
+    traj_obj.WaypointsJson = json.dumps({
         "version": TRAJ_JSON_VERSION,
         "waypoints": [wp.to_dict() for wp in wps]})
 
@@ -196,9 +150,14 @@ def teach_waypoint(traj_obj, name: str = "", motion=PTP) -> Waypoint:
     """
     rob = traj_obj.Robot
     wps = load_waypoints(traj_obj)
-    tcp = fk_tcp_in_world(rob) or App.Placement()
-    wp = Waypoint(new_uid(), name or next_waypoint_name(wps), JOINT,
-                  rbt_kine.curr_joint_vals_doc(rob), tcp, motion)
+    tcp = rbt_kine.fk_tcp_in_world(rob) or App.Placement()
+    wp = Waypoint(uid=new_uid(),
+                  name=name or next_waypoint_name(wps),
+                  mode=JOINT,
+                  q_doc=rbt_kine.curr_joint_vals_doc(rob),
+                  tcp_in_world=tcp,
+                  motion=motion,
+                  speed=rbt_kine.default_speed(rob, motion))
     save_waypoints(traj_obj, wps + [wp])
     return wp
 
@@ -209,12 +168,18 @@ def add_cartesian_waypoint(traj_obj, target, name: str = "",
     CARTESIAN waypoint at target
     None when unreachable
     """
-    q = ik_tcp_in_world(traj_obj.Robot, target)
+    rob = traj_obj.Robot
+    q = rbt_kine.ik_tcp_in_world(rob, target)
     if q is None:
         return None
     wps = load_waypoints(traj_obj)
-    wp = Waypoint(new_uid(), name or next_waypoint_name(wps), CARTESIAN,
-                  q, target, motion)
+    wp = Waypoint(uid=new_uid(),
+                  name=(name or next_waypoint_name(wps)),
+                  mode=CARTESIAN,
+                  q_doc=q,
+                  tcp_in_world=target,
+                  motion=motion,
+                  speed=rbt_kine.default_speed(rob, motion))
     save_waypoints(traj_obj, wps + [wp])
     return wp
 

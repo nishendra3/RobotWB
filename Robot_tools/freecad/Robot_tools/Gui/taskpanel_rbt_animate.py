@@ -113,7 +113,7 @@ class AnimationController:
 
     def __init__(self, robot_obj):
         self.robot = robot_obj
-        joints = robot_obj.Robot_joints
+        joints = robot_obj.RobotJoints
         self.j_num = len(joints)  # number of jonits
         self.j_nms = [f"Joint{n:02d}" for n in range(self.j_num)]  # jnames
         self.j_step = 1.0  # step increment size for angles
@@ -160,8 +160,8 @@ class AnimationController:
 
     def set_initial_pose(self):
         """force apply offset2 with recompute-twice trick"""
-        asm = self.robot.Robot_assembly
-        for jnt in self.robot.Robot_joints:
+        asm = self.robot.RobotAssembly
+        for jnt in self.robot.RobotJoints:
             jtype = joint_type_FC2WB(jnt.JointType)
 
             # skip fixed joints
@@ -276,7 +276,7 @@ class RobotControlWidget(QWidget):
         # -- Joint Rows --
         brow = 1
         for idx, jnm in enumerate(self.ctrl.j_nms):
-            jtype = joint_type_FC2WB(self.robot.Robot_joints[idx].JointType)
+            jtype = joint_type_FC2WB(self.robot.RobotJoints[idx].JointType)
 
             # skip making rows for fixed joints
             if jtype == FIXED:
@@ -410,7 +410,7 @@ class RobotControlWidget(QWidget):
             sl.blockSignals(False)
 
         # increment/decremnt buttons
-        jt = joint_type_FC2WB(self.robot.Robot_joints[j_idx].JointType)
+        jt = joint_type_FC2WB(self.robot.RobotJoints[j_idx].JointType)
         unit = " mm" if jt == PRISMATIC else "°"
         bm = getObjByName(self, f"btn_jnt_m{nm}")
         if bm is not None:
@@ -490,7 +490,7 @@ class RobotControlWidget(QWidget):
             self.ctrl.commit_joints()
 
         # cfg write -> onChanged invalidates the kin chain
-        set_joint_cfg(self.robot, self.robot.Robot_joints[j_idx],
+        set_joint_cfg(self.robot, self.robot.RobotJoints[j_idx],
                       dir=-1 if checked else 1)
 
         self.ctrl.sync_joints_from_doc()
@@ -530,7 +530,7 @@ class RobotControlWidget(QWidget):
             # fcl_msg(wid.children())  # DBG
             pass
 
-        for j_n, jnt in enumerate(self.ctrl.robot.Robot_joints):
+        for j_n, jnt in enumerate(self.ctrl.robot.RobotJoints):
             if dbg_s:
                 fcl_msg(f"{j_n} {jnt.Label}")
 
@@ -583,7 +583,7 @@ class RobotControlWidget(QWidget):
     def on_doc_changed(self, obj, prop: str) -> None:
         if self._writing or not is_alive(self.robot):
             return
-        if prop == "Offset2" and obj in self.robot.Robot_joints:
+        if prop == "Offset2" and obj in self.robot.RobotJoints:
             QTimer.singleShot(0, self.sync_panel_from_doc)
 
 

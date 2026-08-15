@@ -67,7 +67,7 @@ class Waypoint:
 
     def to_dict(self) -> Dict:
         """
-        out: plain-json dict for the Waypoints_json property
+        out: plain-json dict for the WaypointsJson property
         """
         base = self.tcp_in_world.Base
         qx, qy, qz, qw = self.tcp_in_world.Rotation.Q
@@ -77,7 +77,7 @@ class Waypoint:
             "mode": self.mode,
             "q_doc": list(self.q_doc),
             "tcp_in_world": [base.x, base.y, base.z,
-                           qx, qy, qz, qw],
+                             qx, qy, qz, qw],
             "motion": self.motion,
             "speed": self.speed,
             "blend": self.blend,
@@ -87,7 +87,7 @@ class Waypoint:
     @staticmethod
     def from_dict(data: Dict) -> "Waypoint":
         """
-        in: one Waypoints_json entry
+        in: one WaypointsJson entry
         out: Waypoint (missing key fallbacks to default vals)
         """
         x, y, z, qx, qy, qz, qw = data.get(
@@ -98,7 +98,7 @@ class Waypoint:
             mode=data.get("mode", JOINT),
             q_doc=list(data.get("q_doc", [])),
             tcp_in_world=App.Placement(App.Vector(x, y, z),
-                                     App.Rotation(qx, qy, qz, qw)),
+                                       App.Rotation(qx, qy, qz, qw)),
             motion=data.get("motion", PTP),
             speed=data.get("speed"),
             blend=data.get("blend"),
@@ -205,3 +205,4 @@ class PlanTiming:
     pace_seg: int = -1
     pace_joint: int = -1  # slowest joint to determine time
     err_msg: str = ""
+    bad_segs: tuple = ()  # (segment index, error message)

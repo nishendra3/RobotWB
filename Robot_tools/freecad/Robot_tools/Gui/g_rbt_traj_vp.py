@@ -3,15 +3,17 @@ g_rbt_traj_vp.py
 view provider for the trajectory object
 """
 import os
-from typing import List, Dict
+from typing import Dict, List, Optional
 
 from pivy import coin  # type: ignore
 
 from freecad.Robot_tools import rbt_locator
-from freecad.Robot_tools.App import rbt_traj, rbt_traj_plan
+from freecad.Robot_tools.App import rbt_traj_plan, rbt_kine
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_warn
 from freecad.Robot_tools.App.rbt_global_constants import ap_clr
-from freecad.Robot_tools.App.rbt_traj_types import DocObj, Waypoint
+from freecad.Robot_tools.App.rbt_traj_types import (
+    DocObj, SolvedWaypoint, V3)
+from freecad.Robot_tools.App.rbt_traj_plan import TrajectoryPlan
 from freecad.Robot_tools.Gui import so_helpers as so
 
 # trajectory colors
@@ -28,7 +30,7 @@ class ViewProviderTrajectory:
     """
     Draws the FK sampled TCP paths and markers per waypoint
     Scenegraph:
-        root -> asm_transformation (asm to world) -> [path_sep, marker_sep]
+        root -> [path_sep, marker_sep]   (world coords)
     """
 
     def __init__(self, vobj):
@@ -44,9 +46,6 @@ class ViewProviderTrajectory:
         self.vobj = vobj
         self.Object = vobj.Object
 
-        # init asm to world pose
-        self.uframe_tx = coin.SoTransform()
-
         # path & wp marker separators
         self.path_sep = coin.SoSeparator()
         self.marker_sep = coin.SoSeparator()
@@ -55,7 +54,7 @@ class ViewProviderTrajectory:
         self.wp_mats: Dict[str, coin.SoMaterial] = {}
         self.wp_seps: Dict[str, coin.SoSeparator] = {}
 
-        root = so.sep(self.uframe_tx, self.path_sep, self.marker_sep)
+        root = so.sep(self.path_sep, self.marker_sep)
         vobj.addDisplayMode(root, "Standard")
 
         self.resample(vobj.Object)
@@ -64,7 +63,7 @@ class ViewProviderTrajectory:
         """
         resample when waypoints, num of prev samples, robot change
         """
-        if prop in ("Waypoints_json", "Preview_samples"):
+        if prop in ("WaypointsJson", "PreviewSamples"):
             self.resample(fp)
         elif prop == "Robot":
             self.resample(fp)
@@ -75,11 +74,17 @@ class ViewProviderTrajectory:
         """
         self.clear_display()
         robot = fp.Robot
-        wps = rbt_traj.load_waypoints(fp)
-        if robot is None or not wps:
+        if robot is None:
             return
-        self.build_markers(wps)
-        self.build_path(fp, robot, wps)
+        try:
+            plan, solved, _ = rbt_traj_plan.get_plan(fp)
+        except Exception as e:   # chain not ready
+            fcl_warn(f"{fp.Name}: path visualisation skipped - {e}\n")
+            return
+        if not solved:
+            return
+        self.build_markers(robot, solved)
+        self.build_path(fp, robot, plan)
 
     def clear_display(self) -> None:
         self.path_sep.removeAllChildren()
@@ -87,43 +92,43 @@ class ViewProviderTrajectory:
         self.wp_mats.clear()
         self.wp_seps.clear()
 
-    def make_marker(self, wp: Waypoint) -> coin.SoSeparator:
+    def marker_pos(self, robot: DocObj,
+                   solved_wp: SolvedWaypoint) -> V3:
         """
-        in: waypoint
-        out: sphere sep at the stored pose
+        actual reachable point: FK of the solved q,
+        taught pose when unsolved
         """
+        if solved_wp.q_doc is not None:
+            plc = rbt_kine.fk_tcp_in_world(robot, solved_wp.q_doc)
+            if plc is not None:
+                return plc.Base
+        return solved_wp.wp.tcp_in_world.Base
+
+    def make_marker(self, robot: DocObj,
+                    solved_wp: SolvedWaypoint) -> coin.SoSeparator:
         mat = so.material(COLOR_WP)
         sphere = coin.SoSphere()
         sphere.radius.setValue(WP_RADIUS_MM)
-        b = wp.tcp_in_world.Base
+        b = self.marker_pos(robot, solved_wp)
         mk = so.sep(so.transform((b.x, b.y, b.z)), mat, sphere)
-
-        # store the marker information
-        self.wp_mats[wp.uid] = mat
-        self.wp_seps[wp.uid] = mk
-
+        self.wp_mats[solved_wp.wp.uid] = mat
+        self.wp_seps[solved_wp.wp.uid] = mk
         return mk
 
-    def build_markers(self, wps: List[Waypoint]) -> None:
-        for wp in wps:
-            self.marker_sep.addChild(self.make_marker(wp))
+    def build_markers(self, robot: DocObj,
+                      solved: List[SolvedWaypoint]) -> None:
+        for solved_wp in solved:
+            self.marker_sep.addChild(self.make_marker(robot, solved_wp))
 
-    def build_path(self, fp: DocObj,
-                   robot: DocObj, wps: List[Waypoint]) -> None:
+    def build_path(self, fp: DocObj, robot: DocObj,
+                   plan: Optional[TrajectoryPlan]) -> None:
         """
         build tcp path needs if the points are valid
         """
-        try:
-            plan, _, _ = rbt_traj_plan.get_plan(fp)
-        except Exception as e:   # chain not ready
-            fcl_warn(f"{fp.Name}: path visualisation skipped - {e}\n")
-            return
         if plan is None:
             return
-
         path_points = rbt_traj_plan.sample_tcp_path_world(
-            robot, plan, fp.Preview_samples)
-
+            robot, plan, fp.PreviewSamples)
         style = coin.SoDrawStyle()
         style.lineWidth = PATH_WIDTH
         for pts in path_points:

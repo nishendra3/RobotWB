@@ -4,7 +4,7 @@ waypoint table renderer for the trajectory panel
 """
 from __future__ import annotations
 
-from typing import Optional, Callable, List
+from typing import Optional, Callable, List, Dict
 
 from PySide import QtCore, QtGui  # type: ignore
 from PySide.QtWidgets import (  # type: ignore
@@ -19,8 +19,8 @@ CLR_ERR = QtGui.QColor(ap_clr["B_Red"][1])
 CLR_PACE = QtGui.QColor(ap_clr["HC_Yellow"][1])
 
 # column order
-(COL_NUM, COL_NAME, COL_MODE, COL_MOTION,
- COL_PACE, COL_UNIT, COL_POSE, COL_STATUS) = range(8)
+(COL_NAME, COL_MODE, COL_MOTION,
+ COL_PACE, COL_UNIT, COL_POSE) = range(6)
 
 
 class WaypointTable:
@@ -52,10 +52,10 @@ class WaypointTable:
 
     # ---------- render ----------
 
-    def fill(self, solved: List[SolvedWaypoint], pace_row: int,
-             pace_msg: str = "") -> None:
+    def fill(self, solved: List[SolvedWaypoint],
+             bad_rows: Dict[int, str]) -> None:
         """
-        in: solved waypoints, row to tint amber (-1 = none)
+        in: solved waypoints, {row: err} to tint amber
         """
         self.updating = True
         try:
@@ -63,10 +63,9 @@ class WaypointTable:
             for row, sw in enumerate(solved):
                 self.fill_row(row, sw)
                 if sw.err_msg:
-                    self.tint_row(row, CLR_ERR)
-                elif row == pace_row:
-                    self.tbl.setItem(row, COL_STATUS, self.ro_item(pace_msg))
-                    self.tint_row(row, CLR_PACE)
+                    self.tint_row(row, CLR_ERR, sw.err_msg)
+                elif row in bad_rows:
+                    self.tint_row(row, CLR_PACE, bad_rows[row])
         finally:
             self.updating = False
 
@@ -76,11 +75,9 @@ class WaypointTable:
         val = wp.duration if wp.duration is not None else wp.speed
         val_txt = "" if val is None else f"{val:g}"
 
-        self.tbl.setItem(row, COL_NUM, self.ro_item(str(row + 1)))
         self.tbl.setItem(row, COL_NAME, QTableWidgetItem(wp.name))
         self.tbl.setItem(row, COL_PACE, QTableWidgetItem(val_txt))
         self.tbl.setItem(row, COL_POSE, self.ro_item(pose_txt))
-        self.tbl.setItem(row, COL_STATUS, self.ro_item(sw.err_msg or "OK"))
 
         # mode combo dorpdown
         self.tbl.setCellWidget(row, COL_MODE, self.combo(
@@ -128,11 +125,12 @@ class WaypointTable:
             lambda txt: None if self.updating else on_pick(txt))
         return cb
 
-    def tint_row(self, row: int, clr: QtGui.QColor) -> None:
-        for col in (COL_NUM, COL_NAME, COL_POSE, COL_PACE, COL_STATUS):
+    def tint_row(self, row: int, clr: QtGui.QColor, tip: str = "") -> None:
+        for col in (COL_NAME, COL_PACE, COL_POSE):
             item = self.tbl.item(row, col)
             if item:
                 item.setBackground(clr)
+                item.setToolTip(tip)
 
     # ---------- edit forwarding ----------
 

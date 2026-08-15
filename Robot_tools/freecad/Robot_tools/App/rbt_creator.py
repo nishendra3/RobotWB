@@ -82,18 +82,18 @@ class RobotCreator:
         has_base_ref = (self.grounded_joint() is not None
                         or self.has_grounded_datum())
 
-        has_enough_joints = len(f.Robot_joints) >= 1
+        has_enough_joints = len(f.RobotJoints) >= 1
 
         return (has_base_ref and has_enough_joints)
 
     def bind(self, asm):
         """
         Bind creator to asm
-        FPO resolved using its Robot_assembly back-link
+        FPO resolved using its RobotAssembly back-link
         """
         self.assembly = asm
         robs = all_robots(asm.Document)
-        valid_robs = (r for r in robs if r.Robot_assembly is asm)
+        valid_robs = (r for r in robs if r.RobotAssembly is asm)
         self.fpo = next(valid_robs, None)
 
     def resolve(self, hint=None):
@@ -121,7 +121,7 @@ class RobotCreator:
 
     def build_assembly(self, doc=None):
         """
-        Adds Robot_Assembly + Robot_FPO into the
+        Adds RobotAssembly + Robot_FPO into the
         working document
         """
         self.asm_doc = doc or self.asm_doc or App.ActiveDocument
@@ -129,12 +129,12 @@ class RobotCreator:
         fpo = self.asm_doc.addObject("App::FeaturePython", ROBOT_FPO_NAME)
         Robot(fpo)
         if App.GuiUp:
-            # ^This is needed to nest the Robot_assembly and Toools
+            # ^This is needed to nest the RobotAssembly and Toools
             # under the main FPO tree node
             from freecad.Robot_tools.Gui.vp_rbt_robot \
                 import ViewProviderRobot
             ViewProviderRobot(fpo.ViewObject)
-        fpo.Robot_assembly = asm
+        fpo.RobotAssembly = asm
         self.asm_doc.recompute()
         self.bind(asm)
         return asm
@@ -157,14 +157,14 @@ class RobotCreator:
         in the assembly & registers them with FPO
         """
         j = add_joint(self.assembly, jtype, refs, label)
-        self.fpo.Robot_joints = list(self.fpo.Robot_joints) + [j]
+        self.fpo.RobotJoints = list(self.fpo.RobotJoints) + [j]
         v = joint_value_doc(j, 1)
         set_joint_cfg(self.fpo, j, zero=v, home=v)
         return j
 
     def next_joint_index(self):
         """Next free rb_jnt index (max existing + 1)."""
-        js = self.fpo.Robot_joints if self.fpo else []
+        js = self.fpo.RobotJoints if self.fpo else []
         idxs = [int(j.Label2[6:]) for j in js if j.Label2[6:].isdigit()]
         return max(idxs, default=-1) + 1
 
@@ -183,10 +183,10 @@ class RobotCreator:
         """Remove a joint and keep robot joints/directions in sync."""
         doc = self.assembly.Document
 
-        if self.fpo and obj in self.fpo.Robot_joints:
-            joints = list(self.fpo.Robot_joints)
+        if self.fpo and obj in self.fpo.RobotJoints:
+            joints = list(self.fpo.RobotJoints)
             joints.remove(obj)
-            self.fpo.Robot_joints = joints
+            self.fpo.RobotJoints = joints
             drop_joint_cfg(self.fpo, obj)
 
         # read frame before the joint deletion
@@ -196,7 +196,7 @@ class RobotCreator:
         doc.removeObject(obj.Name)
 
         if root and BASE_FRAME_NAME in root.Name:
-            joints = self.fpo.Robot_joints if self.fpo else ()
+            joints = self.fpo.RobotJoints if self.fpo else ()
             if not any(j.Reference1
                        and j.Reference1[0] is root
                        for j in joints):
@@ -290,10 +290,10 @@ class RobotCreator:
 
     def assembly_owner(self, obj, sub):
         """
-        Return the Robot_Assembly that owns the given subelement of `obj`.
+        Return the RobotAssembly that owns the given subelement of `obj`.
 
         Returns:
-            Assembly object if the subelement belongs to a Robot_Assembly,
+            Assembly object if the subelement belongs to a RobotAssembly,
             otherwise None.
         """
         return next(
@@ -318,7 +318,7 @@ class RobotCreator:
 
     def finalize(self):
         """
-        validate, seed Base_placement and recompute doc
+        validate, seed BasePlacement and recompute doc
         """
         if not self.is_valid_robot():
             raise RbtDocError("robot needs a base and >= 1 joint")

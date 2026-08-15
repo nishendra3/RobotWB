@@ -8,6 +8,7 @@ import UtilsAssembly  # type: ignore
 
 from freecad.Robot_tools.App.rbt_kine_joints import get_joint_cfg
 from freecad.Robot_tools.App.rbt_helpers_log import fcl_err
+from freecad.Robot_tools.App.rbt_properties import JNT_KINE_PROPS
 
 PLC_TOL = 1e-6
 _SYNC: set[tuple[str, str]] = set()  # (doc, name) of robs currently mid-sync
@@ -75,7 +76,7 @@ def joint_dir(joint):
     default: +1
     """
     for fpo in joint.InList:
-        js = getattr(fpo, "Robot_joints", None)
+        js = getattr(fpo, "RobotJoints", None)
         if js and joint in js:
             return get_joint_cfg(fpo, joint).dir
     return 1
@@ -83,7 +84,7 @@ def joint_dir(joint):
 
 def chain_root(rbt_obj):
     """Reference1 obj of the first robot joint, or None"""
-    joints = list(getattr(rbt_obj, "Robot_joints", None) or [])
+    joints = list(getattr(rbt_obj, "RobotJoints", None) or [])
     if not joints or not joints[0].Reference1:
         return None
     return joints[0].Reference1[0]
@@ -94,14 +95,14 @@ def base_link(robot):
     identify the base link for given robot obj
     priority order: BaseFrame Datum -> GroundedJoint -> First Ref1
     """
-    asm = getattr(robot, "Robot_assembly", None)
+    asm = getattr(robot, "RobotAssembly", None)
     root = chain_root(robot)
 
     if is_grounded_datum(root, asm):
         return root
 
     # REMOVE: Legacy Path -------------
-    gj = find_grounded_joint(getattr(robot, "Robot_assembly", None))
+    gj = find_grounded_joint(getattr(robot, "RobotAssembly", None))
     if gj is not None and gj.ObjectToGround is not None:
         return gj.ObjectToGround
     # ---------------------------------
@@ -111,10 +112,10 @@ def base_link(robot):
 
 def p_asm_in_world(robot) -> App.Placement:
     """
-    pose of the robot_assembly container in the world coords
+    pose of the robotAssembly container in the world coords
     p_asm_world = p_world * p_asm
     """
-    return robot.Robot_assembly.getGlobalPlacement()
+    return robot.RobotAssembly.getGlobalPlacement()
 
 
 def p_world_to_asm(robot, plc_world: App.Placement) -> App.Placement:
@@ -130,37 +131,37 @@ def p_parent_in_world(robot) -> App.Placement:
     pose of the frame the assembly is kept in
     p_world = p_asm_world * inv(p_asm)
     """
-    asm = robot.Robot_assembly
+    asm = robot.RobotAssembly
     return (asm.getGlobalPlacement()
             .multiply(asm.Placement.inverse()))
 
 
 def get_base_placement(robot):
     bl = base_link(robot)
-    if (getattr(robot, "Robot_assembly", None) is None or
+    if (getattr(robot, "RobotAssembly", None) is None or
             bl is None):
         return None
 
     # bl.Placement places base CAD in asm, frozen when BaseFrame
     # is made moving baselink placement moves the whole geometry
     #
-    # Base_offset places the frame on that link relative to its CAD
+    # BaseOffset places the frame on that link relative to its CAD
     # origin. Changing it just moves frame, not the part
 
     return (p_asm_in_world(robot)
             .multiply(bl.Placement)
-            .multiply(robot.Base_offset))
+            .multiply(robot.BaseOffset))
 
 
 def push_base_placement(robot):
     """
-    FPO.Base_placement -> asm.Placement
+    FPO.BasePlacement -> asm.Placement
     (from Robot.onChanged)
     """
     key = (robot.Document.Name, robot.Name)
     if key in _SYNC:
         return
-    asm, bl = getattr(robot, "Robot_assembly", None), base_link(robot)
+    asm, bl = getattr(robot, "RobotAssembly", None), base_link(robot)
     if asm is None or bl is None:
         # TODO: This will currently skip unless the robot exists
         # check if we want to handle the case where user wants to
@@ -168,8 +169,8 @@ def push_base_placement(robot):
         return
 
     tgt = (p_parent_in_world(robot).inverse()
-           .multiply(robot.Base_placement)
-           .multiply(robot.Base_offset.inverse())
+           .multiply(robot.BasePlacement)
+           .multiply(robot.BaseOffset.inverse())
            .multiply(bl.Placement.inverse()))
 
     if asm.Placement.isSame(tgt, PLC_TOL):
@@ -187,8 +188,8 @@ def push_base_placement(robot):
 
 def pull_base_placement(robot):
     """
-    asm.Placement -> FPO.Base_placement
-    (on resotre or edits of Base_offset)
+    asm.Placement -> FPO.BasePlacement
+    (on resotre or edits of BaseOffset)
     """
     key = (robot.Document.Name, robot.Name)
     if key in _SYNC:
@@ -196,13 +197,13 @@ def pull_base_placement(robot):
     bp = get_base_placement(robot)
     if bp is None:
         return
-    if robot.Base_placement.isSame(bp, PLC_TOL):
+    if robot.BasePlacement.isSame(bp, PLC_TOL):
         return
 
     _SYNC.add(key)
 
     try:
-        robot.Base_placement = bp
+        robot.BasePlacement = bp
     finally:
         _SYNC.discard(key)
 
@@ -211,17 +212,27 @@ def pull_base_placement(robot):
 
 def after_base_move(robot):
     """
-    refresh the tool position after robot is moved
+    refresh dependent displays after
+    robot has been moved
     """
     refresh_tool(robot)
+    invalidate_traj_plans(robot)
     refresh_trajectories(robot)
+
+
+def invalidate_traj_plans(robot):
+    """
+    base moved -> cartesian IK solutions are invalid
+    """
+    for traj in (getattr(robot, "Trajectories", None) or []):
+        traj.Proxy.plan_cache = None
 
 
 def refresh_tool(robot):
     """
     recompute the active tool's tcp
     """
-    tool = getattr(robot, "Active_tool", None)
+    tool = getattr(robot, "ActiveTool", None)
     if tool is not None:
         try:
             tool.recompute()
@@ -243,18 +254,29 @@ def refresh_trajectories(robot):
 
 class BaseLinkSyncObserver:
     """
-    mirrors the direct assembly moves into the base placement
-    thus keeping the frame location & assembly in sync
+    doc-wide observer:
+    - joint speed/limit edits -> drop stale plan caches
+    - direct assembly moves -> mirror into BasePlacement
     """
 
     def slotChangedObject(self, obj, prop):
+        # joint speed/limit edit -> owning robot's plans are stale
+        if prop in JNT_KINE_PROPS:
+            for rob in obj.InList:
+                js = getattr(rob, "RobotJoints", None)
+                if js and obj in js:
+                    for traj in (rob.Trajectories or []):
+                        traj.Proxy.plan_cache = None
+            return
+
+        # direct assembly moves only
         if prop != "Placement" or obj.TypeId != "Assembly::AssemblyObject":
             return
 
-        # avoid importing rbt_robot.is_robot here due to cyclic import
+        # mirror the move into BasePlacement
         for rob in obj.InList:
-            if (getattr(rob, "Robot_assembly", None) is obj
-                    and hasattr(rob, "Base_placement")):
+            if (getattr(rob, "RobotAssembly", None) is obj
+                    and hasattr(rob, "BasePlacement")):
                 pull_base_placement(rob)
 
 

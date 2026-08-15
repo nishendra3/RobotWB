@@ -26,15 +26,19 @@ DEFAULT_INSERT_STAGGER_PCT = 0.0
 
 # default robot joint speeds
 DEFAULT_MAX_SPEEDS = {
-    "revolute": 10,    # deg/sec at 100%
+    "revolute": 100,    # deg/sec at 100%
     "prismatic": 100,  # mm/sec at 100%
 }
 
+# ERROR TOL
+LIM_EPS = 1e-6
+
+# UNIT CONVERSION
 MM_PER_M = 1000.0
 DEFAULT_SLIDER_TRAVEL_MM = 500
 
 # trajectory feature
-TRAJ_JSON_VERSION = 1        # Waypoints_json schema version
+TRAJ_JSON_VERSION = 1        # WaypointsJson schema version
 DEFAULT_TRAJ_SAMPLES = 24    # path preview samples per segment
 
 DEFAULT_PTP_SPEED = 100.0    # % of full joint speed (ptp)

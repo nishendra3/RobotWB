@@ -190,13 +190,13 @@ def create_tool(robot, name="Default_Tool"):
         from freecad.Robot_tools.Gui.vp_rbt_tool import ViewProviderTool
         ViewProviderTool(tool_fpo.ViewObject)
 
-    tool_fpo.Flange_link = (robot.Robot_joints[-1].Reference2
-                            if robot.Robot_joints else None)
+    tool_fpo.Flange_link = (robot.RobotJoints[-1].Reference2
+                            if robot.RobotJoints else None)
     tool_fpo.Tool_offset = App.Placement()
     tool_fpo.TCP_offset = App.Placement()
     tool_fpo.Tool_mass = 0.0
     robot.Tools = list(robot.Tools) + [tool_fpo]
-    robot.Active_tool = tool_fpo
+    robot.ActiveTool = tool_fpo
     return tool_fpo
 
 

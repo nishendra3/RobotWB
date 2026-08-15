@@ -272,7 +272,7 @@ def run():
     if robot is None:
         fcl_err("no robot selected or found in curr file")
         return
-    if not robot.Robot_joints:
+    if not robot.RobotJoints:
         fcl_err("robot has no joints yet")
         return
     Gui.Control.showDialog(DefineTCP(robot))

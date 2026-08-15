@@ -62,11 +62,11 @@ class RobotApi:
 
     @property
     def assembly(self):
-        return self.fpo.Robot_assembly
+        return self.fpo.RobotAssembly
 
     @property
     def n_joints(self) -> int:
-        return len(self.fpo.Robot_joints)
+        return len(self.fpo.RobotJoints)
 
     @property
     def joint_types(self) -> List[str]:
@@ -167,22 +167,22 @@ class RobotApi:
     # ------- base -------
     @property
     def base(self):
-        return self.fpo.Base_placement
+        return self.fpo.BasePlacement
 
     @base.setter
     def base(self, plc):
-        self.fpo.Base_placement = plc  # onChanged pushes to asm
+        self.fpo.BasePlacement = plc  # onChanged pushes to asm
 
     # ------- tool -------
     @property
     def tool(self):
-        return self.fpo.Active_tool
+        return self.fpo.ActiveTool
 
     @tool.setter
     def tool(self, tool_fpo):
         if tool_fpo not in list(self.fpo.Tools):
             raise RbtInputError("tool is not in robot.Tools")
-        self.fpo.Active_tool = tool_fpo  # onChanged invalidates
+        self.fpo.ActiveTool = tool_fpo  # onChanged invalidates
 
     @property
     def tools(self):
@@ -200,14 +200,14 @@ class RobotApi:
     # ------- kinematics lib -------
     @property
     def kinematics_lib(self) -> str:
-        return self.fpo.Kinematics_lib
+        return self.fpo.KinematicsLib
 
     @kinematics_lib.setter
     def kinematics_lib(self, name):
         if name not in KIN_LIB_NAMES:
             raise RbtInputError(
                 f"unknown lib, use one of {KIN_LIB_NAMES}")
-        self.fpo.Kinematics_lib = name  # onChanged invalidates
+        self.fpo.KinematicsLib = name  # onChanged invalidates
 
     # ------- trajectories -------
     @property
@@ -314,7 +314,7 @@ class RobotBuilder:
         self.creator.asm_doc = self.doc
 
     def new_robot(self) -> "RobotBuilder":
-        """Robot_Assembly + Robot_FPO into the doc"""
+        """RobotAssembly + Robot_FPO into the doc"""
         self.creator.build_assembly(self.doc)
         return self
 
@@ -368,6 +368,6 @@ class RobotBuilder:
 
     def finish(self) -> "RobotApi":
         """
-        validate, seed Base_placement, recompute
+        validate, seed BasePlacement, recompute
         """
         return RobotApi(self.creator.finalize())

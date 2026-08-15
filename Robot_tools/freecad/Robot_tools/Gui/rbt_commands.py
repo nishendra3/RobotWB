@@ -149,7 +149,7 @@ class CommandTrajectoryPlayer:
     def IsActive(self):
         doc = App.ActiveDocument
         return doc is not None and any(
-            getattr(o, "Waypoint_count", 0) > 1 for o in doc.Objects)
+            getattr(o, "WaypointCount", 0) > 1 for o in doc.Objects)
 
     def Activated(self):
         from freecad.Robot_tools.Gui import g_rbt_traj_gplayer

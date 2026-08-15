@@ -6,8 +6,7 @@ Builds the Robot_Assembly & links part instances to it
 import FreeCAD as App  # type: ignore
 
 from freecad.Robot_tools.App.rbt_global_constants import (
-    ROBOT_ASSEMBLY_LABEL, ROBOT_FPO_NAME
-)
+    ROBOT_ASSEMBLY_LABEL)
 from freecad.Robot_tools.App.rbt_robot import is_robot, all_robots
 
 
@@ -50,13 +49,13 @@ def resolve_asm_ref(asm_doc: App.Document,
     if (hint is not None and
             hint.Document is asm_doc):
         if is_robot(hint):
-            return hint.Robot_assembly, hint, "from_hint"
+            return hint.RobotAssembly, hint, "from_hint"
 
-        fpo = next((r for r in robots if r.Robot_assembly is hint), None)
+        fpo = next((r for r in robots if r.RobotAssembly is hint), None)
         return hint, fpo, "from_hint"
 
     if len(robots) == 1:
-        return robots[0].Robot_assembly, robots[0], "only_robot"
+        return robots[0].RobotAssembly, robots[0], "only_robot"
 
     objs = find_assemblies(asm_doc)  # FPO-less in-progress asm
     if not robots and len(objs) == 1:
@@ -67,7 +66,7 @@ def resolve_asm_ref(asm_doc: App.Document,
 
 def find_assemblies(doc):
     """
-    All Robot_Assembly objects in doc
+    All Robot Assembly objects in doc
     """
     return [o for o in doc.Objects
             if o.isDerivedFrom("Assembly::AssemblyObject")

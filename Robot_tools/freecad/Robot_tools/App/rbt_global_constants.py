@@ -83,6 +83,15 @@ ap_clr = {
     "Orange": [(1.0, 0.647, 0.0), "#FFA500"],
 }
 
+ui_clr = {
+    "ok":       ["#30DB5B", "#248A3D"],
+    "warn":     ["#FFB340", "#FF9500"],
+    "err":      ["#FF6961", "#D70015"],
+    "field_bg": ["#2A2A2A", "#FFFFFF"],
+    "field_fg": ["#E6E6E6", "#1E1E1E"],
+    "field_bd": ["#555555", "#B4B4B4"],
+    "tint_fg":  ["#202020", "#202020"],
+}
 
 DEFAULT_KIN_LIB = "numpy_dls"
 

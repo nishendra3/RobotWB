@@ -21,10 +21,10 @@ from PySide.QtWidgets import (  # noqa # type: ignore
     QFileDialog, QMessageBox,  # Dialogs
     QGridLayout, QVBoxLayout, QScrollArea)  # Layouts and Policy
 from PySide.QtCore import QObject, Qt  # type: ignore # noqa
-from PySide.QtGui import QIcon, QFont  # type: ignore # noqa
+from PySide.QtGui import QIcon, QFont, QPalette  # type: ignore # noqa
 
 from freecad.Robot_tools import rbt_locator
-from freecad.Robot_tools.App.rbt_global_constants import ap_clr
+from freecad.Robot_tools.App.rbt_global_constants import ui_clr
 from freecad.Robot_tools.App.rbt_robot import is_robot, all_robots
 
 
@@ -32,19 +32,21 @@ from freecad.Robot_tools.App.rbt_robot import is_robot, all_robots
 #                   Color setters
 # ------------------------------------------------
 
+def theme_clr(key):
+    """
+    Hex color for the current theme (dark/light)
+    """
+    return ui_clr[key][0 if is_darkmode() else 1]
+
 
 def set_txt_color(txt, col):
-    """Set text color using html syntax."""
-    if col == "o":
-        f_clr = ap_clr['B_Green'][1]
-    elif col == "w":
-        f_clr = ap_clr['Orange'][1]
-    elif col == "e":
-        f_clr = ap_clr['B_Red'][1]
-    else:
-        f_clr = "black"
-
-    return f"<span style='color: {f_clr}'> {txt} </span>"
+    """
+    Set text color using html syntax
+    """
+    key = {"o": "ok", "w": "warn", "e": "err"}.get(col)
+    if key is None:
+        return txt
+    return f"<span style='color: {theme_clr(key)}'> {txt} </span>"
 
 # ------------------------------------------------
 #                   UI functions
@@ -341,3 +343,21 @@ def get_qsb(sb):
     """
     return float(App.Units.Quantity(
         sb.property("value")).getValueAs(sb.property("unit")))
+
+
+def is_darkmode():
+    """
+    True when the FreeCAD theme is dark
+    Taken from FEM-WB
+    """
+    ss = App.ParamGet(
+        "User parameter:BaseApp/Preferences/MainWindow"
+        ).GetString("StyleSheet")
+    if "dark" in ss.lower():
+        return True
+    if "light" in ss.lower():
+        return False
+    # no theme name hit: compare the palette colors
+    pl = Gui.getMainWindow().palette()
+    return (pl.color(QPalette.Text).lightness()
+            > pl.color(QPalette.Window).lightness())

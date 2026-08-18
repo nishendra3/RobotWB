@@ -16,18 +16,15 @@ from contextlib import contextmanager
 from PySide import QtGui, QtCore  # type: ignore
 from PySide.QtCore import QTimer  # type: ignore
 from PySide.QtWidgets import (  # type: ignore
-    QWidget, QApplication,  QFrame, QGroupBox, QLabel,
+    QWidget, QApplication, QGroupBox, QLabel,
     QHBoxLayout,  QGridLayout,  QSizePolicy)
 
 from freecad.Robot_tools.Gui.rbt_helpers_ui import (
-    cm_gbx, cm_btn,
-    cm_lbl,
+    cm_gbx, cm_btn, cm_lbl,
     cm_dspb, cm_slider, cm_toggle,
-    cm_scroll,
-    cm_tool_btn,
-    getObjByName,
-    msg_box,
-    is_alive
+    cm_scroll, cm_tool_btn,
+    getObjByName, msg_box,
+    is_alive, theme_clr
 )
 
 from freecad.Robot_tools.App.rbt_robot import is_robot
@@ -67,10 +64,12 @@ def create_link_row(dlg, gbx_l, row, fnt, jr, low, hi, jtype):
 
     # Col 0 : Joint label
     lbl_jnt = cm_lbl(dlg, f"lbl_jnt{nm}", f"Joint{nm}", fnt, 0)
-    lbl_jnt.setFrameShape(QFrame.Shape.Panel)
-    lbl_jnt.setFrameShadow(QFrame.Shadow.Sunken)
-    lbl_jnt.setStyleSheet("QLabel {background-color: palette(base);"
-                          "color: palette(text);}")
+    lbl_ss = ("QLabel {"
+              f"background-color: {theme_clr('field_bg')};"
+              f" color: {theme_clr('field_fg')};"
+              f" border: 1px solid {theme_clr('field_bd')};"
+              " padding: 0px 2px;}")
+    lbl_jnt.setStyleSheet(lbl_ss)
     lbl_jnt.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Minimum)
     gbx_l.addWidget(lbl_jnt, row, 0, 1, 1)
 

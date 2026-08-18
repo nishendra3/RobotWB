@@ -14,6 +14,7 @@ from freecad.Robot_tools.App.rbt_global_constants import ap_clr
 from freecad.Robot_tools.App.rbt_traj_types import (
     CARTESIAN, JOINT, SolvedWaypoint, TargetMode,
     LIN, PTP, MotionType)
+from freecad.Robot_tools.Gui.rbt_helpers_ui import theme_clr
 
 CLR_ERR = QtGui.QColor(ap_clr["B_Red"][1])
 CLR_PACE = QtGui.QColor(ap_clr["HC_Yellow"][1])
@@ -129,8 +130,10 @@ class WaypointTable:
         for col in (COL_NAME, COL_PACE, COL_POSE):
             item = self.tbl.item(row, col)
             if item:
-                item.setBackground(clr)
                 item.setToolTip(tip)
+                item.setBackground(clr)
+                # fixed dark text for light & dark
+                QtGui.QColor(theme_clr("tint_fg"))
 
     # ---------- edit forwarding ----------
 

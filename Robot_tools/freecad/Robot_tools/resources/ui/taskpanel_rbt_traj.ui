@@ -92,37 +92,37 @@
        <widget class="QLabel" name="label_x"><property name="text"><string>X</string></property></widget>
       </item>
       <item row="0" column="1">
-       <widget class="Gui::QuantitySpinBox" name="qsb_x"/>
+       <widget class="Gui::QuantitySpinBox" name="qsb_x"><property name="unit" stdset="0"><string notr="true">mm</string></property></widget>
       </item>
       <item row="0" column="2">
        <widget class="QLabel" name="label_yaw"><property name="text"><string>Yaw</string></property></widget>
       </item>
       <item row="0" column="3">
-       <widget class="Gui::QuantitySpinBox" name="qsb_yaw"/>
+       <widget class="Gui::QuantitySpinBox" name="qsb_yaw"><property name="unit" stdset="0"><string notr="true">deg</string></property></widget>
       </item>
       <item row="1" column="0">
        <widget class="QLabel" name="label_y"><property name="text"><string>Y</string></property></widget>
       </item>
       <item row="1" column="1">
-       <widget class="Gui::QuantitySpinBox" name="qsb_y"/>
+       <widget class="Gui::QuantitySpinBox" name="qsb_y"><property name="unit" stdset="0"><string notr="true">mm</string></property></widget>
       </item>
       <item row="1" column="2">
        <widget class="QLabel" name="label_pitch"><property name="text"><string>Pitch</string></property></widget>
       </item>
       <item row="1" column="3">
-       <widget class="Gui::QuantitySpinBox" name="qsb_pitch"/>
+       <widget class="Gui::QuantitySpinBox" name="qsb_pitch"><property name="unit" stdset="0"><string notr="true">deg</string></property></widget>
       </item>
       <item row="2" column="0">
        <widget class="QLabel" name="label_z"><property name="text"><string>Z</string></property></widget>
       </item>
       <item row="2" column="1">
-       <widget class="Gui::QuantitySpinBox" name="qsb_z"/>
+       <widget class="Gui::QuantitySpinBox" name="qsb_z"><property name="unit" stdset="0"><string notr="true">mm</string></property></widget>
       </item>
       <item row="2" column="2">
        <widget class="QLabel" name="label_roll"><property name="text"><string>Roll</string></property></widget>
       </item>
       <item row="2" column="3">
-       <widget class="Gui::QuantitySpinBox" name="qsb_roll"/>
+       <widget class="Gui::QuantitySpinBox" name="qsb_roll"><property name="unit" stdset="0"><string notr="true">deg</string></property></widget>
       </item>
       <item row="3" column="3">
        <widget class="QPushButton" name="btn_xyz_add">

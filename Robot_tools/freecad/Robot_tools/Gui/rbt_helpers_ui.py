@@ -333,16 +333,21 @@ def set_qsb(sb, value):
     """
     write a number into Gui::QuantitySpinBox (unit: mm, deg, kg)
     """
-    sb.setProperty("value", App.Units.Quantity(float(value),
-                                               sb.property("unit")))
+    q = App.Units.Quantity(float(value), sb.property("unit"))
+    sb.setProperty("rawValue", q.Value)
+    # sb.setProperty("value", App.Units.Quantity(float(value),
+    #                                            sb.property("unit")))
 
 
 def get_qsb(sb):
     """
     reads a number from Gui::QuantitySpinBox in specified unit
     """
-    return float(App.Units.Quantity(
-        sb.property("value")).getValueAs(sb.property("unit")))
+    unit = sb.property("unit")
+    return float(App.Units.Quantity(sb.property("rawValue"),
+                                    App.Units.Unit(unit)).getValueAs(unit))
+    # return float(App.Units.Quantity(
+    #     sb.property("value")).getValueAs(sb.property("unit")))
 
 
 def is_darkmode():

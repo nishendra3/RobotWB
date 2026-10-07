@@ -34,13 +34,14 @@ ROBOT_SCHEMA = [
      "(moves the frame label, not the robot)"),
 
     # trajectory properties
-    # hidden scope for "Trajectories" below to prevent dependency loop
-    ("Trajectories", "App::PropertyLinkListHidden", "Trajectory",
+    ("Trajectories", "App::PropertyLinkListGlobal", "Trajectory",
      "Trajectories attached to this robot"),
 ]
 
 TRAJ_SCHEMA = [
-    ("Robot", "App::PropertyLinkGlobal", "Trajectory",
+    
+    # hidden scope for robot backlink to prevent dependency loop
+    ("Robot", "App::PropertyLinkHidden", "Trajectory",
      "Robot this trajectory drives"),
 
     ("WaypointsJson", "App::PropertyString", "Trajectory",

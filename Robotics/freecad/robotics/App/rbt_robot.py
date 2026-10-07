@@ -162,14 +162,26 @@ class Robot:
 
     def migrate_traj_links(self, obj):
         """
-        re-add Trajectories when an old doc has it non-hidden
+        migrate trajectory ownership:
+        Robot.Trajectories (fwd) : normal dependency link
+        Trajectory.Robot (bwd) : hidden backlink
         """
         if (obj.getTypeIdOfProperty("Trajectories")
-                == "App::PropertyLinkListHidden"):
+                == "App::PropertyLinkListGlobal"):
             return
         trajs = list(obj.Trajectories)
+        for traj in trajs:
+            isBacklinkHidden = (
+                traj.getTypeIdOfProperty("Robot")  == "App::PropertyLinkHidden")
+            if isBacklinkHidden: continue
+            rob = traj.Robot
+            traj.removeProperty("Robot")
+            traj.addProperty("App::PropertyLinkHidden", "Robot",
+                             "Trajectory", "Robot this trajectory drives")
+            traj.Robot = rob
+
         obj.removeProperty("Trajectories")
-        obj.addProperty("App::PropertyLinkListHidden", "Trajectories",
+        obj.addProperty("App::PropertyLinkListGlobal", "Trajectories",
                         "Trajectory", "Trajectories attached to this robot")
         obj.Trajectories = trajs
 
